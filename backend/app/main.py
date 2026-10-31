@@ -1,0 +1,46 @@
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from . import clock, config
+from .api import approvals, compare, dean, directives, grievances, settings, swarm, tickets, ws
+from .db import Base, SessionLocal, engine, get_db
+from .models import Place, User
+from .services import get_settings
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    Base.metadata.create_all(engine)
+    with SessionLocal() as db:
+        clock.set_offset(get_settings(db).clock_offset_minutes)
+    yield
+
+
+app = FastAPI(title="Campus Grievance Swarm API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_credentials=True,
+                   allow_methods=["*"], allow_headers=["*"])
+
+for module in (grievances, tickets, approvals, directives, swarm, dean, settings, compare, ws):
+    app.include_router(module.router)
+
+
+@app.get("/health")
+async def health():
+    return {"ok": True, "meko_backend": config.MEKO_BACKEND, "now": clock.now().isoformat()}
+
+
+@app.get("/places")
+async def places(db: Session = Depends(get_db)):
+    return [{"id": p.id, "name": p.name, "type": p.type, "hostel": p.hostel} for p in db.scalars(select(Place))]
+
+
+@app.get("/users")
+async def users(role: str | None = None, db: Session = Depends(get_db)):
+    """For the demo role switcher (no real login)."""
+    q = select(User) if not role else select(User).where(User.role == role)
+    return [{"id": u.id, "role": u.role, "name": u.pseudonym, "hostel": u.hostel, "department": u.department}
+            for u in db.scalars(q)]
