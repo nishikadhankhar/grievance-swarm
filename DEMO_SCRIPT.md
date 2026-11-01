@@ -1,4 +1,4 @@
-# Campus Grievance Swarm — 5-minute demo script
+# Sahayak — 5-minute demo script
 
 **Do** = what to click. **Say** = what to tell the judges. **Behind it** = what the system is doing, in case
 they ask.
@@ -20,7 +20,7 @@ they ask.
 
 ## 0:00 — The problem (20 seconds)
 
-**Say:** "On campus, the same broken router gets reported 15 times, nobody tells students why it's late, and
+**Say:** "This is Sahayak, which means helper. On campus, the same broken router gets reported 15 times, nobody tells students why it's late, and
 when a technician finds the fix, that knowledge leaves with them. We built a swarm of AI agents with a shared
 memory, Meko, where agents route and remember, and people make every decision that matters."
 

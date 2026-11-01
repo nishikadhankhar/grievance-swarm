@@ -6,7 +6,7 @@ import { RoleProvider } from "@/components/RoleProvider";
 import { TopBar } from "@/components/TopBar";
 
 export const metadata: Metadata = {
-  title: "Campus Grievance Swarm",
+  title: "Sahayak · Campus help desk",
   description: "Students raise campus complaints, AI agents route and remember them, staff decide.",
 };
 

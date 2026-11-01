@@ -149,8 +149,8 @@ export function TopBar() {
     <header className="sticky top-0 z-30 bg-white">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3.5 sm:px-8">
         <Link href={HOME[role]} className="flex items-center gap-2.5">
-          <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-orange-500 text-base font-bold text-white">G</span>
-          <span className="text-base font-semibold">Campus Grievance Swarm</span>
+          <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-orange-500 text-base font-bold text-white">S</span>
+          <span className="text-base font-semibold">Sahayak</span>
         </Link>
         <span
           className={cx("flex items-center gap-1.5 text-xs", live ? "text-green-700" : "text-gray-400")}

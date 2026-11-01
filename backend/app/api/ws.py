@@ -1,4 +1,6 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import asyncio
+
+from fastapi import APIRouter, WebSocket
 
 from ..auth import user_for_token
 from ..bus import bus
@@ -20,11 +22,18 @@ async def events(ws: WebSocket, token: str | None = None):
         return
     await ws.accept()
     q = bus.subscribe()
-    try:
+
+    async def push():
         await ws.send_json({"type": "hello", "data": {}})
         while True:
             await ws.send_json(await q.get())
-    except WebSocketDisconnect:
-        pass
+
+    # Events are pushed from a separate task while this one listens, so a closed tab or a server
+    # shutdown/reload ends the handler instead of leaving it waiting on the queue forever.
+    sender = asyncio.create_task(push())
+    try:
+        while (await ws.receive())["type"] != "websocket.disconnect":
+            pass
     finally:
+        sender.cancel()
         bus.unsubscribe(q)

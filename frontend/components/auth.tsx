@@ -7,8 +7,8 @@ export function AuthShell({ title, sub, children }: { title: string; sub: string
     <div className="flex min-h-screen justify-center bg-gray-50 px-4 py-12 sm:py-20">
       <div className="w-full max-w-[440px] space-y-6">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-orange-500 text-base font-bold text-white">G</span>
-          <span className="text-base font-semibold">Campus Grievance Swarm</span>
+          <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-orange-500 text-base font-bold text-white">S</span>
+          <span className="text-base font-semibold">Sahayak</span>
         </div>
         <div>
           <h1 className="text-[28px] font-bold">{title}</h1>

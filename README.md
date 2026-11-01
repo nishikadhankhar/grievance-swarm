@@ -1,4 +1,6 @@
-# Campus Grievance Swarm
+# Sahayak
+
+*Sahayak* (सहायक) means "helper". It's a campus grievance swarm.
 
 Hackathon demo. Students report problems, Meko-backed agents merge, route and remember them, and staff
 make every decision that matters. FastAPI backend + Next.js 14 frontend. UI designs:

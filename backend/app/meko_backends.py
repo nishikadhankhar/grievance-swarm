@@ -228,7 +228,7 @@ class RealMeko:
 
     def _conversation(self, key: str, datapack_id: str | None = None) -> str:
         # Meko requires a conversation_id on every call; session_id makes it the same conversation each run.
-        args = {"agent_id": self.AGENT, "session_id": f"{self.AGENT}-{key}", "title": f"Grievance Swarm: {key}"}
+        args = {"agent_id": self.AGENT, "session_id": f"{self.AGENT}-{key}", "title": f"Sahayak: {key}"}
         if datapack_id:
             args["datapack_id"] = datapack_id
         return self.mcp.call("conversation_create", args)["id"]
