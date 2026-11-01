@@ -67,8 +67,11 @@ class MekoAdapter:
             c = self._log(db, actor=actor, op=op, datapack=dp_label, summary=text, skipped=True, **log)
             return MekoResult(c.id, skipped=True)
         t0, ids, error = time.perf_counter(), [], None
+        # A live promotion goes into Meko's shared knowledge layer; seeded (simulated) ones stay plain memories
+        # so re-seeding doesn't keep adding the same lessons to the shared layer.
+        save = self.backend.promote if op == "promote" and not log.get("simulated") else self.backend.add
         try:
-            ids = [await asyncio.to_thread(self.backend.add, dp, text, meta or {}) for dp in datapacks]
+            ids = [await asyncio.to_thread(save, dp, text, meta or {}) for dp in datapacks]
         except Exception as exc:  # logged, counted as an error on the board
             error = f"{type(exc).__name__}: {exc}"
         c = self._log(db, actor=actor, op=op, datapack=dp_label, summary=text, result_ids=ids,

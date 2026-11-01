@@ -75,7 +75,12 @@ not Meko**, but it is instant and works offline.
 
 - Each demo datapack becomes a Meko datapack (`gs-desk`, `gs-dept-wifi`, … `gs-campus-kb`), created on
   first use. That is 6 of the Free plan's 10.
-- Every write, share, directive and promotion is a `memory_add`, and every recall is a `memory_search`.
+- Every write, share and directive is a `memory_add`. When the Warden approves a lesson, it is saved and then
+  **promoted** (`memory_promote`) into `gs-campus-kb`'s shared knowledge base, Meko's collective memory, so it
+  appears under Collective Memory in the Meko dashboard. Seeded demo lessons are not promoted, so re-seeding
+  doesn't keep adding copies.
+- Every recall runs `memory_search` and `knowledgebase_search` in parallel, because promoted memories leave
+  the private store.
   Results are Meko's, ranked by Meko's semantic score; anything under `MEKO_MIN_SCORE` (0.35) is treated
   as unrelated.
 - Meko's search can't filter by metadata and `memory_update` only replaces text, so a local index

@@ -153,7 +153,7 @@ and the campus gets smarter every time something is fixed."
 
 | Question | Answer |
 |---|---|
-| Is this real Meko? | With `MEKO_BACKEND=real`, yes: every write is a Meko `memory_add` and every recall a `memory_search` over its MCP server, into datapacks `gs-desk`, `gs-dept-wifi`… that you can open in the Meko dashboard. Labels like "open/closed" live in a small local index, because Meko's search can't filter on them. *(If you demo on `local`, say it's the offline stand-in.)* |
+| Is this real Meko? | With `MEKO_BACKEND=real`, yes: every write is a Meko `memory_add`, every recall a `memory_search` plus `knowledgebase_search`, and a Warden-approved lesson is promoted with `memory_promote` into collective memory (watch the Collective Memory counter in the Meko dashboard), all over its MCP server, into datapacks `gs-desk`, `gs-dept-wifi`… that you can open in the Meko dashboard. Labels like "open/closed" live in a small local index, because Meko's search can't filter on them. *(If you demo on `local`, say it's the offline stand-in.)* |
 | What's the AI model? | Any OpenAI-compatible model, Qwen3 8B on Ollama by default. If no model is reachable it falls back to rules, so the demo never stalls. |
 | Can an agent close a ticket or escalate on its own? | No. Closing, approving lessons and verifying patterns are always done by a person. |
 | Privacy? | Students are pseudonyms; names, phone numbers, emails and roll numbers are stripped before Meko or any prompt. |

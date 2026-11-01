@@ -53,6 +53,7 @@ def _matches(meta: dict, where: dict | None) -> bool:
 
 class MekoBackend(Protocol):
     def add(self, datapack: str, text: str, meta: dict) -> str: ...
+    def promote(self, datapack: str, text: str, meta: dict) -> str: ...
     def search(self, datapacks: list[str], query: str, k: int, where: dict | None, min_score: float) -> list[dict]: ...
     def update_meta(self, item_id: str, patch: dict) -> None: ...
     def reset(self) -> None: ...
@@ -76,6 +77,9 @@ class LocalMeko:
             )
             self._conn.commit()
         return item_id
+
+    def promote(self, datapack: str, text: str, meta: dict) -> str:
+        return self.add(datapack, text, meta)  # the stand-in has no separate shared layer
 
     def search(self, datapacks: list[str], query: str, k: int, where: dict | None, min_score: float) -> list[dict]:
         marks = ",".join("?" * len(datapacks))
@@ -208,10 +212,14 @@ class _SessionExpired(Exception):
 class RealMeko:
     """Meko over its MCP server. Each demo datapack maps to a Meko datapack named MEKO_DATAPACK_PREFIX + name.
 
-    Meko stores every memory and answers every recall (memory_search). A local index keeps the labels the
-    agents filter on (kind, status, place...), because Meko's search has no metadata filter and
-    memory_update can only replace text. Recall hits are Meko's, joined to that index by memory id; an
-    empty query (a listing, not a search) is answered from the index.
+    Meko stores every memory and answers every recall. A local index keeps the labels the agents filter on
+    (kind, status, place...), because Meko's search has no metadata filter and memory_update can only
+    replace text. Recall hits are Meko's, joined to that index by memory id; an empty query (a listing, not
+    a search) is answered from the index.
+
+    Warden-approved knowledge is promoted (memory_promote) into the datapack's shared knowledge base, Meko's
+    collective memory. Promotion moves it out of memory_search's reach, so every recall also runs
+    knowledgebase_search, whose hits carry the original memory id.
     """
 
     AGENT = "grievance-swarm"
@@ -224,7 +232,7 @@ class RealMeko:
         self._index._conn.execute("CREATE TABLE IF NOT EXISTS meko_ids (meko_id TEXT PRIMARY KEY, item_id TEXT)")
         self._datapacks: dict[str, tuple[str, str]] = {}  # demo name -> (Meko datapack id, conversation id)
         self._setup_lock = threading.Lock()
-        self._pool = ThreadPoolExecutor(max_workers=len(DEMO_DATAPACKS))
+        self._pool = ThreadPoolExecutor(max_workers=2 * len(DEMO_DATAPACKS))
 
     def _conversation(self, key: str, datapack_id: str | None = None) -> str:
         # Meko requires a conversation_id on every call; session_id makes it the same conversation each run.
@@ -269,8 +277,24 @@ class RealMeko:
             conn.commit()
         return item_id
 
-    def _search_one(self, datapack: str, query: str, limit: int) -> list[dict]:
-        return self.mcp.call("memory_search", self._args(datapack, query=query, limit=limit)).get("results", [])
+    def promote(self, datapack: str, text: str, meta: dict) -> str:
+        """Save, then move into the datapack's shared knowledge base (Meko's collective memory)."""
+        item_id = self.add(datapack, text, meta)
+        with self._index._lock:
+            ids = [r[0] for r in self._index._conn.execute("SELECT meko_id FROM meko_ids WHERE item_id = ?", (item_id,))]
+        self.mcp.call("memory_promote", self._args(datapack, memory_ids=ids))
+        return item_id
+
+    def _memory_hits(self, datapack: str, query: str, limit: int) -> list[tuple[str, float]]:
+        res = self.mcp.call("memory_search", self._args(datapack, query=query, limit=limit))
+        return [(h["id"], float(h.get("score") or 0.0)) for h in res.get("results", []) if h.get("id")]
+
+    def _knowledge_hits(self, datapack: str, query: str, limit: int) -> list[tuple[str, float]]:
+        # Promoted memories: the hit's metadata names the original memory id; rerank_score is ~0 when unrelated.
+        args = {k: v for k, v in self._args(datapack, query=query, limit=limit).items() if k != "agent_id"}
+        res = self.mcp.call("knowledgebase_search", args)
+        return [(h["metadata_filters"]["memory_id"], float(h.get("rerank_score") or 0.0))
+                for h in res.get("results", []) if (h.get("metadata_filters") or {}).get("memory_id")]
 
     def search(self, datapacks: list[str], query: str, k: int, where: dict | None, min_score: float) -> list[dict]:
         if not query:
@@ -279,10 +303,12 @@ class RealMeko:
         # keyword-tuned thresholds to MEKO_MIN_SCORE. A threshold of 0 (list everything that matches) stays 0.
         floor = max(min_score, config.MEKO_MIN_SCORE) if min_score > 0 else 0.0
         best: dict[str, float] = {}
-        for results in self._pool.map(lambda dp: self._search_one(dp, query, max(20, k * 5)), datapacks):
-            for hit in results:
-                if hit.get("id"):
-                    best[hit["id"]] = max(best.get(hit["id"], 0.0), float(hit.get("score") or 0.0))
+        limit = max(20, k * 5)
+        jobs = [self._pool.submit(fn, dp, query, limit) for dp in datapacks
+                for fn in (self._memory_hits, self._knowledge_hits)]
+        for job in jobs:
+            for meko_id, score in job.result():
+                best[meko_id] = max(best.get(meko_id, 0.0), score)
         if not best:
             return []
         marks = ",".join("?" * len(best))
@@ -303,6 +329,8 @@ class RealMeko:
         self._index.update_meta(item_id, patch)
 
     def reset(self) -> None:
+        # Promoted knowledge stays in Meko's knowledge base; once the index is cleared those entries no longer
+        # match any item, so recall ignores them.
         for dp in DEMO_DATAPACKS:
             self.mcp.call("memory_delete_all", self._args(dp))
         self._index.reset()
