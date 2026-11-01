@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, getToken, onTokenChange, setToken } from "@/lib/api";
 import { HOME } from "@/lib/roles";
 import type { Me, Role, Settings } from "@/lib/types";
@@ -105,8 +105,9 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     <RoleContext.Provider
       value={{ user, role: user?.role ?? "student", userId: user?.id ?? "", signIn, signUp, signOut, settings, updateSettings }}
     >
-      {/* Pages fetch on mount, so only render them once we know who is signed in. */}
-      {onAuthPage || user ? children : null}
+      {/* Pages fetch on mount, so only render them once we know who is signed in. Keyed by account so
+          switching accounts on the same page (e.g. one technician to another) remounts it with fresh data. */}
+      {onAuthPage || user ? <Fragment key={user?.id ?? "signed-out"}>{children}</Fragment> : null}
     </RoleContext.Provider>
   );
 }

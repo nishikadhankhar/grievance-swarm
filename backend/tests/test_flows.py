@@ -77,6 +77,8 @@ def test_flow1_grievance_merges_and_shows_eta(client):
     assert body["merged"] and body["ticket"]["id"] == "T-074" and body["ticket"]["report_count"] == 15
 
     t = client.get("/tickets/T-074").json()
+    report = [e for e in t["events"] if e["actor_type"] == "person"][-1]
+    assert report["actor_id"] == "S-1042" and report["action"] == "Reported “Wi-Fi dead on 2nd floor, Hostel B”"
     merge = [e for e in t["events"] if e["action"].startswith("Merged into")][-1]
     assert merge["actor_type"] == "agent" and merge["meko"]["op"] == "recall" and merge["meko"]["recalled"]
     suggestion = [e for e in t["events"] if e["action"].startswith("Suggested")][0]

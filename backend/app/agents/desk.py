@@ -55,7 +55,8 @@ async def handle_grievance(db: Session, user: User | None, text: str, place: Pla
         ticket.report_count += 1
         g.ticket_id = ticket.id
         db.commit()
-        add_event(db, ticket, "person", reporter, f"Reported “{ticket.title}”", simulated=simulated)
+        # The student's own (redacted) words, so staff see details the ticket title doesn't carry.
+        add_event(db, ticket, "person", reporter, f"Reported “{red}”", simulated=simulated)
         note = await meko.write(db, "desk", "desk", f"Merged report into {ticket.id}: {red}",
                           {"kind": "merge_note", "ticket_id": ticket.id}, ticket_id=ticket.id, simulated=simulated)
         add_event(db, ticket, "agent", "desk", f"Merged into {ticket.id}",
@@ -71,7 +72,7 @@ async def handle_grievance(db: Session, user: User | None, text: str, place: Pla
     db.add(ticket)
     g.ticket_id = ticket.id
     db.commit()
-    add_event(db, ticket, "person", reporter, f"Reported “{ticket.title}”", simulated=simulated)
+    add_event(db, ticket, "person", reporter, f"Reported “{red}”", simulated=simulated)
     fp = await meko.write(db, "desk", "desk", f"{ticket.title}. {red}",
                     {"kind": "fingerprint", "ticket_id": ticket.id, "status": "open", "place_id": place.id,
                      "category": category}, ticket_id=ticket.id, simulated=simulated)
