@@ -1,6 +1,6 @@
 """Department agents (Electricity, Wi-Fi, Water). One code path, one datapack each.
 
-Tools: recall_fixes, read_directives, set_eta, notify, remind.
+Tools: recall_fixes, read_directives, propose_eta, set_eta, notify, remind.
 """
 
 from datetime import datetime, timedelta
@@ -60,7 +60,40 @@ async def on_new_ticket(db: Session, ticket: Ticket, simulated: bool = False) ->
                   f"Recalled from {source} ({top['datapack']})", r.call_id, simulated)
         add_message(db, ticket.category, "technician", f"{ticket.id} flag: {top['text']}", "recall", ticket.id,
                     r.call_id, simulated)
-    await set_eta(db, ticket, simulated=simulated)
+    await propose_eta(db, ticket, simulated=simulated)
+
+
+async def propose_eta(db: Session, ticket: Ticket, simulated: bool = False) -> None:
+    """A first estimate for the Warden to confirm or change. Students see the time only once it's confirmed."""
+    eta = clock.now() + timedelta(hours=BASE_HOURS.get(ticket.category, 4))
+    hold_until, _, read_id = await read_directives(db, ticket, simulated=simulated)
+    reason = None
+    if hold_until and eta < hold_until + HOLD_BUFFER:
+        eta = hold_until + HOLD_BUFFER
+        reason = f"Delayed because of a power cut until {hold_until:%H:%M}"
+    ticket.eta, ticket.eta_reason, ticket.eta_confirmed = eta, reason, False
+    db.commit()
+    w = await meko.write(db, ticket.category, dp(ticket.category),
+                   f"Proposed ETA for {ticket.id}: {eta:%a %H:%M}" + (f" because: {reason}" if reason else ""),
+                   {"kind": "eta", "ticket_id": ticket.id, "confirmed": False}, ticket_id=ticket.id,
+                   target="warden", simulated=simulated)
+    add_event(db, ticket, "agent", ticket.category, f"Proposed ETA {eta:%a %H:%M} for the Warden to confirm", reason,
+              read_id if hold_until else w.call_id, simulated)
+    add_message(db, ticket.category, "warden", f"{ticket.id}: proposed ETA {eta:%a %H:%M}, please confirm", "write",
+                ticket.id, w.call_id, simulated)
+
+
+async def confirm_eta(db: Session, ticket: Ticket, warden: User, eta: datetime, reason: str | None) -> None:
+    """The Warden sets the time students see, then every reporter on the ticket is notified."""
+    ticket.eta, ticket.eta_reason, ticket.eta_confirmed = eta, reason, True
+    db.commit()
+    w = await meko.write(db, "warden", dp(ticket.category) if ticket.category in DEPARTMENTS else "campus-kb",
+                   f"Warden set ETA for {ticket.id} to {eta:%a %H:%M}" + (f" because: {reason}" if reason else ""),
+                   {"kind": "eta", "ticket_id": ticket.id, "confirmed": True}, actor_id=warden.id,
+                   target="students", ticket_id=ticket.id)
+    add_event(db, ticket, "person", warden.id, f"Set ETA to {eta:%a %H:%M}", reason, w.call_id)
+    add_message(db, "warden", "students", f"{ticket.id}: ETA {eta:%a %H:%M}" + (f" — {reason}" if reason else "") +
+                f" (notified all {ticket.report_count} students)", "write", ticket.id, w.call_id)
 
 
 async def set_eta(db: Session, ticket: Ticket, base: datetime | None = None, reason: str | None = None,

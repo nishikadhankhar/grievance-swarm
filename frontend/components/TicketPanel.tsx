@@ -6,13 +6,15 @@ import { etaLabel } from "@/lib/format";
 import type { Ticket } from "@/lib/types";
 import { useRole } from "./RoleProvider";
 import { ContextChip, TicketTimeline, useTicket } from "./ticket";
-import { Button, Card, CategoryChip, ErrorNote, StatusPill } from "./ui";
+import { Button, Card, CategoryChip, ErrorNote, StatusPill, cx } from "./ui";
 
 /** Staff view of one ticket: timeline, add note, accept / override / close. */
 export function TicketPanel({ id, onChanged }: { id: string; onChanged?: (t: Ticket) => void }) {
   const { detail, error } = useTicket(id);
   const { role, settings } = useRole();
   const [note, setNote] = useState("");
+  const [eta, setEta] = useState<string | null>(null); // datetime-local value; null = the ticket's current ETA
+  const [etaReason, setEtaReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const staff = role === "technician" || role === "warden";
@@ -23,6 +25,8 @@ export function TicketPanel({ id, onChanged }: { id: string; onChanged?: (t: Tic
     try {
       const t = await api<Ticket>(path, body);
       setNote("");
+      setEta(null);
+      setEtaReason("");
       onChanged?.(t);
     } catch (e) {
       setActionError((e as Error).message);
@@ -47,10 +51,43 @@ export function TicketPanel({ id, onChanged }: { id: string; onChanged?: (t: Tic
         </div>
         <h2 className="text-xl font-bold">{ticket.title}</h2>
         <p className="text-[13px] text-gray-500">
-          {ticket.place.name} · {ticket.report_count} reports · ETA {etaLabel(ticket.eta, settings?.now)}
+          {ticket.place.name} · {ticket.report_count} reports · {ticket.eta_confirmed ? "ETA" : "Proposed ETA"} {etaLabel(ticket.eta, settings?.now)}
           {ticket.eta_reason && ` — ${ticket.eta_reason}`}
         </p>
       </div>
+
+      {!resolved && role === "warden" && (
+        <div className={cx("space-y-2.5 rounded-xl border p-3.5", ticket.eta_confirmed ? "border-gray-200" : "border-amber-300 bg-amber-50")}>
+          <p className="text-[13px] font-medium text-gray-700">
+            {ticket.eta_confirmed
+              ? "ETA confirmed. Change it if the plan moves:"
+              : "The agent proposed this time. Check the other open tickets, then confirm or change it:"}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="datetime-local"
+              value={eta ?? ticket.eta?.slice(0, 16) ?? ""}
+              onChange={(e) => setEta(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm"
+              aria-label="ETA"
+            />
+            <input
+              value={etaReason}
+              onChange={(e) => setEtaReason(e.target.value)}
+              maxLength={300}
+              placeholder="Reason students will see (optional)"
+              className="min-w-[180px] flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm"
+              aria-label="ETA reason"
+            />
+            <Button
+              onClick={() => run("eta", `/tickets/${id}/eta`, { eta: eta ?? ticket.eta?.slice(0, 16), reason: etaReason || null })}
+              disabled={!!busy || !(eta ?? ticket.eta)}
+            >
+              {busy === "eta" ? "Saving…" : ticket.eta_confirmed ? "Update ETA" : "Confirm ETA"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {ticket.suggestion && (
         <div className="space-y-2 rounded-xl bg-orange-50 p-3.5">

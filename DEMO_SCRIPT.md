@@ -44,7 +44,7 @@ this becomes one ticket, not fifteen."
 
 **Do:** Click **Submit report**. You land on ticket **T-074**.
 
-**Say:** "They're merged into T-074. They see who acted, what happened and why, and an ETA with a reason."
+**Say:** "They're merged into T-074. They see who acted, what happened and why, and an ETA with a reason. That ETA was set by the Warden: for a brand-new ticket the agent only *proposes* a time, because only the Warden sees every open job and can keep 25 promises from clashing."
 
 **Do:** Click a **Meko context** chip in the timeline.
 

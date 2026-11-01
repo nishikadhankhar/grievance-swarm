@@ -105,6 +105,7 @@ sign-up; the WebSocket takes it as `?token=`. Who you are comes only from the to
 | `GET /tickets/{id}` | Ticket + timeline; each event carries its Meko call (`meko.recalled` for ContextChip) |
 | `GET /students/{id}/tickets` | A student's tickets |
 | `GET /staff/queue?role=` | Open tickets with agent suggestion + call ID (a technician sees their own) |
+| `POST /tickets/{id}/eta` | Warden confirms or changes the ETA. New tickets only get an agent *proposal* (`eta_confirmed: false`), which students don't see as a time |
 | `POST /tickets/{id}/notes` | Staff note → written to Meko → agent updates ETA for all reporters |
 | `POST /tickets/{id}/decision` | `accept` / `override` (needs note) / `close` → Curator proposes a lesson |
 | `GET /approvals` · `POST /approvals/{id}` | Warden approves (→ promote to campus-kb) or rejects |

@@ -72,7 +72,8 @@ async def _open_ticket(db, now, *, tid, title, cat, place, minutes_ago, reporter
     created = now - timedelta(minutes=minutes_ago)
     tech = {"wifi": "TECH-WIFI", "electricity": "TECH-ELEC", "water": "TECH-WATER"}[cat]
     t = Ticket(id=tid, title=title, category=cat, place_id=place, status="assigned", assignee_id=tech,
-               report_count=len(reporters), created_at=created, eta=now + timedelta(minutes=eta_in))
+               report_count=len(reporters), created_at=created, eta=now + timedelta(minutes=eta_in),
+               eta_confirmed=True)
     db.add(t)
     for i, uid in enumerate(reporters):
         db.add(Grievance(user_id=uid, raw_text_redacted=text, place_id=place, category=cat, ticket_id=tid,
@@ -96,9 +97,11 @@ async def _open_ticket(db, now, *, tid, title, cat, place, minutes_ago, reporter
                   r.call_id, at=at(2), **SIM)
         add_message(db, cat, "technician", f"{tid} flag: {r.items[0]['text']}", "recall", tid, r.call_id, at=at(2),
                     **SIM)
-    w = await meko.write(db, cat, f"dept-{cat}", f"ETA for {tid} set to {t.eta:%a %H:%M}", {"kind": "eta",
-                   "ticket_id": tid}, ticket_id=tid, at=at(3), **SIM)
-    add_event(db, t, "agent", cat, f"ETA set to {t.eta:%a %H:%M}", None, w.call_id, at=at(3), **SIM)
+    add_event(db, t, "agent", cat, f"Proposed ETA {t.eta:%a %H:%M} for the Warden to confirm", None, at=at(3), **SIM)
+    w = await meko.write(db, "warden", f"dept-{cat}", f"Warden set ETA for {tid} to {t.eta:%a %H:%M}",
+                         {"kind": "eta", "ticket_id": tid, "confirmed": True}, actor_id="WARDEN-1", target="students",
+                         ticket_id=tid, at=at(4), **SIM)
+    add_event(db, t, "person", "WARDEN-1", f"Set ETA to {t.eta:%a %H:%M}", None, w.call_id, at=at(4), **SIM)
     if len(reporters) > 1:
         add_event(db, t, "agent", "desk", f"Merged {len(reporters) - 1} similar reports into {tid}",
                   f"Same place and category within {minutes_ago} minutes", at=at(min(minutes_ago, 20)), **SIM)

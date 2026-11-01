@@ -49,7 +49,7 @@ def ser_ticket(db: Session, t: Ticket) -> dict:
     return {"id": t.id, "title": t.title, "category": t.category, "status": t.status,
             "place": {"id": t.place_id, "name": place.name if place else t.place_id},
             "assignee": {"id": assignee.id, "name": assignee.pseudonym} if assignee else None,
-            "eta": iso(t.eta), "eta_reason": t.eta_reason, "report_count": t.report_count,
+            "eta": iso(t.eta), "eta_reason": t.eta_reason, "eta_confirmed": t.eta_confirmed, "report_count": t.report_count,
             "suggestion": t.suggestion, "suggestion_call_id": t.suggestion_call_id, "visits": t.visits,
             "created_at": iso(t.created_at), "closed_at": iso(t.closed_at)}
 

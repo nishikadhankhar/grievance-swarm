@@ -56,7 +56,13 @@ export default function QueuePage() {
           >
             <div className="flex items-start gap-3">
               <span className="flex-1 text-[17px] font-semibold">{t.title}</span>
-              <Chip className="whitespace-nowrap border border-gray-200 bg-gray-50 text-gray-900">ETA {etaLabel(t.eta, settings?.now)}</Chip>
+              {t.eta_confirmed ? (
+                <Chip className="whitespace-nowrap border border-gray-200 bg-gray-50 text-gray-900">ETA {etaLabel(t.eta, settings?.now)}</Chip>
+              ) : (
+                <Chip className="whitespace-nowrap border border-amber-200 bg-amber-50 text-amber-800">
+                  Proposed {etaLabel(t.eta, settings?.now)}
+                </Chip>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2.5 text-[13px]">
               <span className="font-semibold text-gray-500">{t.id}</span>

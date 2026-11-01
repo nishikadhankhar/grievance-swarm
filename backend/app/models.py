@@ -54,6 +54,9 @@ class Ticket(Base):
     assignee_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     eta: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     eta_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # False while the ETA is only the agent's proposal; the Warden confirms it, because only the Warden
+    # sees every open ticket and can keep times realistic when many reports arrive at once.
+    eta_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     report_count: Mapped[int] = mapped_column(Integer, default=1)
     suggestion: Mapped[str | None] = mapped_column(Text, nullable=True)
     suggestion_call_id: Mapped[str | None] = mapped_column(String(16), nullable=True)

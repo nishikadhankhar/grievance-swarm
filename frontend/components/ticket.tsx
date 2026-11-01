@@ -78,20 +78,22 @@ export function TicketHeader({ ticket }: { ticket: Ticket }) {
 export function EtaCard({ ticket }: { ticket: Ticket }) {
   const { settings } = useRole();
   const resolved = ticket.status === "resolved";
+  // Until the Warden confirms, the time is only the agent's estimate, so students aren't shown it.
+  const pending = !resolved && !ticket.eta_confirmed;
   return (
     <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-2xl border border-orange-200 bg-orange-50/60 p-7">
       <div>
         <div className="text-[13px] font-semibold uppercase tracking-wide text-orange-700">{resolved ? "Resolved at" : "ETA"}</div>
         <div className="text-[56px] font-bold leading-none text-orange-500 sm:text-[64px]">
-          {resolved ? hhmm(ticket.closed_at) : etaLabel(ticket.eta, settings?.now)}
+          {resolved ? hhmm(ticket.closed_at) : pending ? "Soon" : etaLabel(ticket.eta, settings?.now)}
         </div>
       </div>
       <div className="min-w-[220px] flex-1">
         <p className="text-[22px] font-semibold leading-snug">
-          {resolved ? "Fixed. Thanks for reporting." : ticket.eta_reason ?? "On track"}
+          {resolved ? "Fixed. Thanks for reporting." : pending ? "The Warden is scheduling this" : ticket.eta_reason ?? "On track"}
         </p>
         <p className="mt-1.5 text-sm text-gray-500">
-          {resolved ? `ETA was ${etaLabel(ticket.eta, settings?.now)}` : ticket.assignee ? `Assigned to ${ticket.assignee.name}` : "Waiting for assignment"}
+          {resolved ? `ETA was ${etaLabel(ticket.eta, settings?.now)}` : pending ? "You'll see a time here as soon as it's confirmed" : ticket.assignee ? `Assigned to ${ticket.assignee.name}` : "Waiting for assignment"}
         </p>
       </div>
     </div>

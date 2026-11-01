@@ -9,6 +9,8 @@ export interface Ticket {
   assignee: { id: string; name: string } | null;
   eta: string | null;
   eta_reason: string | null;
+  /** False while the time is only the agent's proposal; the Warden confirms it. */
+  eta_confirmed: boolean;
   report_count: number;
   suggestion: string | null;
   suggestion_call_id: string | null;

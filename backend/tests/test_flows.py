@@ -240,3 +240,21 @@ def test_student_can_say_mine_is_different(client):
     assert not r["merged"] and r["ticket"]["id"] != "T-074" and r["ticket"]["category"] == "wifi"
     created = [e for e in client.get(f"/tickets/{r['ticket']['id']}").json()["events"] if e["actor_id"] == "desk"][0]
     assert created["reason"].startswith("Student said")
+
+
+def test_warden_confirms_the_eta(client):
+    r = client.post("/grievances", json={"user_id": "S-1038", "place_id": "library",
+                                         "text": "Lights flickering in the library reading room"}).json()
+    tid = r["ticket"]["id"]
+    t = client.get(f"/tickets/{tid}").json()["ticket"]
+    assert t["eta"] and t["eta_confirmed"] is False  # the agent only proposes
+
+    assert client.post(f"/tickets/{tid}/eta", json={"user_id": "TECH-ELEC", "eta": "2026-11-02T18:00:00"}).status_code == 403
+    ok = client.post(f"/tickets/{tid}/eta", json={"user_id": "WARDEN-1", "eta": "2026-11-02T18:00:00",
+                                                  "reason": "Electrician has 3 jobs before this"})
+    assert ok.status_code == 200, ok.text
+    t = ok.json()
+    assert t["eta_confirmed"] is True and t["eta"].startswith("2026-11-02T18:00") and "3 jobs" in t["eta_reason"]
+    events = client.get(f"/tickets/{tid}").json()["events"]
+    assert any(e["actor_id"] == "WARDEN-1" and e["action"].startswith("Set ETA") for e in events)
+    assert any("notified all 1 students" in m["text"] for m in client.get("/messages").json())

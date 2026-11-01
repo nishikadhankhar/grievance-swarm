@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +21,11 @@ STAFF = ("technician", "warden")
 
 class NoteIn(BaseModel):
     text: str = Field(min_length=2, max_length=1000)
+
+
+class EtaIn(BaseModel):
+    eta: datetime
+    reason: str | None = Field(default=None, max_length=300)
 
 
 class DecisionIn(BaseModel):
@@ -70,6 +76,17 @@ async def add_note(ticket_id: str, body: NoteIn, me: User = Depends(current_user
     user = require_role(me, STAFF)
     t = _ticket(db, ticket_id)
     await department.on_note(db, t, user, body.text)
+    return ser_ticket(db, t)
+
+
+@router.post("/tickets/{ticket_id}/eta")
+async def set_eta(ticket_id: str, body: EtaIn, me: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Warden confirms or changes the ETA students see."""
+    warden = require_role(me, ("warden",))
+    t = _ticket(db, ticket_id)
+    if t.status == "resolved":
+        raise HTTPException(409, f"{t.id} is already resolved")
+    await department.confirm_eta(db, t, warden, body.eta.replace(tzinfo=None), body.reason or None)
     return ser_ticket(db, t)
 
 
