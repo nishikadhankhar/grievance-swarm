@@ -21,7 +21,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Campus Grievance Swarm API", version="0.1.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_credentials=True,
+app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS,
+                   allow_origin_regex=config.CORS_ORIGIN_REGEX, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
 for module in (grievances, tickets, approvals, directives, swarm, dean, settings, compare, ws):

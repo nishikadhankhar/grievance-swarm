@@ -18,6 +18,14 @@ make test      # the four end-to-end flows + Meko OFF, redaction, WebSocket
 The frontend reads `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`; see
 `frontend/.env.local.example`). The backend allows `CORS_ORIGINS=http://localhost:3000` by default.
 
+## Deploy on Render
+
+`render.yaml` defines both services (free plan). Open
+<https://dashboard.render.com/blueprint/new?repo=https://github.com/nishikadhankhar/grievance-swarm>,
+connect the repo and apply. The API reseeds on every start, since the free instance's disk is wiped on
+restart. If Render gives the API a URL other than `https://grievance-swarm-api.onrender.com`, set
+`NEXT_PUBLIC_API_URL` on the web service to that URL and redeploy it.
+
 ## Frontend
 
 | Route | Role | What it does |

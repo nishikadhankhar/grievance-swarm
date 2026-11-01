@@ -1,0 +1,42 @@
+# Render Blueprint: two web services from this repo.
+# Deploy: https://dashboard.render.com/blueprint/new?repo=https://github.com/nishikadhankhar/grievance-swarm
+services:
+  - type: web
+    name: grievance-swarm-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # SQLite lives on the instance's disk, which Render wipes on every restart, so seed fresh each start.
+    # One worker only: the event bus behind /ws/events is in-process.
+    startCommand: python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /docs
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: MEKO_BACKEND
+        value: local
+      - key: MEKO_API_KEY
+        sync: false
+      - key: CORS_ORIGIN_REGEX
+        value: https://.*\.onrender\.com
+      # No model is reachable on Render unless you point these at a hosted OpenAI-compatible API;
+      # without one the agents use their rule fallbacks.
+      - key: LLM_BASE_URL
+        value: http://localhost:11434/v1
+      - key: LLM_MODEL
+        value: qwen3:8b
+
+  - type: web
+    name: grievance-swarm-web
+    runtime: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    startCommand: npx next start -p $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      # Baked in at build time. If Render gives the API a different URL, change this and redeploy.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://grievance-swarm-api.onrender.com

@@ -18,3 +18,5 @@ LLM_MODEL = os.getenv("LLM_MODEL", "qwen3:8b")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "ollama")
 
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
+# Optional, for hosts whose URL isn't known in advance (e.g. "https://.*\.onrender\.com" on Render).
+CORS_ORIGIN_REGEX = os.getenv("CORS_ORIGIN_REGEX") or None
