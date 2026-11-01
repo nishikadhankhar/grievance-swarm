@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { LOCAL_MEKO_BADGE } from "@/lib/constants";
 import { HOME, ROLE_LABEL } from "@/lib/roles";
 import type { Me, Role } from "@/lib/types";
 import { useSocketUp } from "@/lib/ws";
@@ -103,19 +104,27 @@ export function MekoToggle() {
   const { settings, updateSettings } = useRole();
   const on = settings?.meko_enabled ?? true;
   return (
-    <button
-      onClick={() => updateSettings({ meko_enabled: !on })}
-      disabled={!settings}
-      className="flex items-center gap-2.5 text-[13px] font-medium"
-      aria-pressed={on}
-      title="Meko OFF really means off: agents run with no memory"
-    >
-      Meko
-      <span className={cx("flex h-[22px] w-10 items-center rounded-full p-0.5 transition-colors", on ? "justify-end bg-orange-500" : "justify-start bg-gray-300")}>
-        <span className="h-[18px] w-[18px] rounded-full bg-white shadow-sm" />
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => updateSettings({ meko_enabled: !on })}
+        disabled={!settings}
+        className="flex items-center gap-2.5 text-[13px] font-medium"
+        aria-pressed={on}
+        title="Meko OFF really means off: agents run with no memory"
+      >
+        Meko
+        <span className={cx("flex h-[22px] w-10 items-center rounded-full p-0.5 transition-colors", on ? "justify-end bg-orange-500" : "justify-start bg-gray-300")}>
+          <span className="h-[18px] w-[18px] rounded-full bg-white shadow-sm" />
+        </span>
+        <span className={cx("w-7 text-xs font-semibold", on ? "text-orange-500" : "text-gray-500")}>{on ? "ON" : "OFF"}</span>
+      </button>
+      <span
+        className="hidden xl:inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+        title="Running on local SQLite keyword stand-in (offline mode)"
+      >
+        {LOCAL_MEKO_BADGE}
       </span>
-      <span className={cx("w-7 text-xs font-semibold", on ? "text-orange-500" : "text-gray-500")}>{on ? "ON" : "OFF"}</span>
-    </button>
+    </div>
   );
 }
 
@@ -156,20 +165,22 @@ export function TopBar() {
           </svg>
         </Link>
       </div>
-      <nav className="flex gap-7 overflow-x-auto border-b border-gray-200 px-4 sm:px-8" aria-label="Screens">
-        {TABS[role].map((t) => {
-          const active = !onSwarm && path.startsWith(t.href);
-          return (
-            <Link
-              key={t.href}
-              href={t.href}
-              className={cx("whitespace-nowrap border-b-2 py-3 text-sm", active ? "border-orange-500 font-semibold text-orange-700" : "border-transparent font-medium text-gray-500 hover:text-gray-900")}
-            >
-              {t.label}
-            </Link>
-          );
-        })}
-      </nav>
+      {role !== "student" && (
+        <nav className="flex gap-7 overflow-x-auto border-b border-gray-200 px-4 sm:px-8" aria-label="Screens">
+          {TABS[role].map((t) => {
+            const active = !onSwarm && path.startsWith(t.href);
+            return (
+              <Link
+                key={t.href}
+                href={t.href}
+                className={cx("whitespace-nowrap border-b-2 py-3 text-sm", active ? "border-orange-500 font-semibold text-orange-700" : "border-transparent font-medium text-gray-500 hover:text-gray-900")}
+              >
+                {t.label}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
     </header>
   );
 }
