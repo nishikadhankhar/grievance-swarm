@@ -11,7 +11,7 @@ import { Button, Card, CategoryChip, ErrorNote, StatusPill } from "./ui";
 /** Staff view of one ticket: timeline, add note, accept / override / close. */
 export function TicketPanel({ id, onChanged }: { id: string; onChanged?: (t: Ticket) => void }) {
   const { detail, error } = useTicket(id);
-  const { userId, role, settings } = useRole();
+  const { role, settings } = useRole();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -82,7 +82,7 @@ export function TicketPanel({ id, onChanged }: { id: string; onChanged?: (t: Tic
           <ErrorNote error={actionError} />
           <div className="flex flex-wrap gap-2.5">
             <Button
-              onClick={() => run("accept", `/tickets/${id}/decision`, { user_id: userId, action: "accept", note: note || null })}
+              onClick={() => run("accept", `/tickets/${id}/decision`, { action: "accept", note: note || null })}
               disabled={!!busy}
             >
               {busy === "accept" ? "Accepting…" : "Accept"}
@@ -91,7 +91,7 @@ export function TicketPanel({ id, onChanged }: { id: string; onChanged?: (t: Tic
               variant="outline"
               onClick={() =>
                 note.trim()
-                  ? run("override", `/tickets/${id}/decision`, { user_id: userId, action: "override", note })
+                  ? run("override", `/tickets/${id}/decision`, { action: "override", note })
                   : setActionError("Write a note saying why you are overriding the suggestion")
               }
               disabled={!!busy}
@@ -100,7 +100,7 @@ export function TicketPanel({ id, onChanged }: { id: string; onChanged?: (t: Tic
             </Button>
             <Button
               variant="outline"
-              onClick={() => run("close", `/tickets/${id}/decision`, { user_id: userId, action: "close", note: note || null })}
+              onClick={() => run("close", `/tickets/${id}/decision`, { action: "close", note: note || null })}
               disabled={!!busy}
               title="The note becomes the fix the Curator learns from"
             >
@@ -109,7 +109,7 @@ export function TicketPanel({ id, onChanged }: { id: string; onChanged?: (t: Tic
             <span className="flex-1" />
             <Button
               variant="ghost"
-              onClick={() => run("note", `/tickets/${id}/notes`, { user_id: userId, text: note })}
+              onClick={() => run("note", `/tickets/${id}/notes`, { text: note })}
               disabled={!!busy || note.trim().length < 2}
             >
               {busy === "note" ? "Saving…" : "Save note"}

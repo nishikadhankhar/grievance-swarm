@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 
 from ..agents import desk
 from ..db import get_db
-from ..models import Place
+from ..auth import current_user
+from ..models import Place, User
 from ..services import ser_ticket
-from . import require_user
+from . import require_role
 
 router = APIRouter(tags=["grievances"])
 
@@ -17,7 +18,6 @@ class PreviewIn(BaseModel):
 
 
 class GrievanceIn(PreviewIn):
-    user_id: str
     photo_url: str | None = None
     anonymous: bool = False
 
@@ -37,8 +37,8 @@ async def preview(body: PreviewIn, db: Session = Depends(get_db)):
 
 
 @router.post("/grievances", status_code=201)
-async def create_grievance(body: GrievanceIn, db: Session = Depends(get_db)):
-    user = require_user(db, body.user_id, ("student",))
+async def create_grievance(body: GrievanceIn, me: User = Depends(current_user), db: Session = Depends(get_db)):
+    user = require_role(me, ("student",))
     ticket, g, merged = await desk.handle_grievance(db, None if body.anonymous else user, body.text,
                                                     _place(db, body.place_id), body.photo_url)
     return {"grievance_id": g.id, "merged": merged, "ticket": ser_ticket(db, ticket)}

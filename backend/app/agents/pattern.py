@@ -18,11 +18,11 @@ from ..services import add_message, ser_approval
 MIN_REPEATS = 3
 
 
-def scan(db: Session) -> list[Approval]:
+async def scan(db: Session) -> list[Approval]:
     since = clock.now() - timedelta(days=90)
     closed = db.scalars(select(Ticket).where(Ticket.status == "resolved", Ticket.closed_at >= since)).all()
     counts = Counter((t.category, t.place_id) for t in closed)
-    known = meko.recall(db, "pattern", ["campus-kb"], "", k=50, where={"kind": "pattern"})
+    known = await meko.recall(db, "pattern", ["campus-kb"], "", k=50, where={"kind": "pattern"})
     pending = {(a.payload.get("category"), a.payload.get("place_id")) for a in db.scalars(
         select(Approval).where(Approval.kind == "pattern", Approval.status == "pending")).all()}
     flagged = []

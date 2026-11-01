@@ -18,6 +18,9 @@ services:
         value: local
       - key: MEKO_API_KEY
         sync: false
+      # Asked for when you apply the Blueprint; staff need it to sign up.
+      - key: STAFF_SIGNUP_CODE
+        sync: false
       - key: CORS_ORIGIN_REGEX
         value: https://.*\.onrender\.com
       # No model is reachable on Render unless you point these at a hosted OpenAI-compatible API;

@@ -27,7 +27,7 @@ export default function MyTickets() {
       <ErrorNote error={error} />
       {(none || role !== "student") && (
         <Empty>
-          {role !== "student" ? "Switch to the Student role to see your tickets." : `${userId} hasn't reported anything yet. `}
+          {role !== "student" ? "Sign in with a student account to see your tickets." : `${userId} hasn't reported anything yet. `}
           {role === "student" && (
             <Link href="/student/new" className="font-semibold text-orange-700">
               Report a problem

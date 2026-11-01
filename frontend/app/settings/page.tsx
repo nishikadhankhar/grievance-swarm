@@ -73,7 +73,6 @@ export default function SettingsPage() {
                   hostel,
                   message,
                   valid_to: until,
-                  user_id: "TECH-ELEC",
                 });
                 return r.held_tickets.length ? `Posted. Held: ${r.held_tickets.join(", ")}` : "Posted. No open tickets needed holding.";
               })

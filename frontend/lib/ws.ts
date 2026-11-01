@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { API_URL } from "./api";
+import { API_URL, getToken, onTokenChange } from "./api";
 import type { BusEvent } from "./types";
 
 // One shared WebSocket to /ws/events for the whole app; pages subscribe with useEvents. Nothing polls.
@@ -19,8 +19,9 @@ function setUp(v: boolean) {
 }
 
 function connect() {
-  if (sock || typeof window === "undefined") return;
-  sock = new WebSocket(API_URL.replace(/^http/, "ws") + "/ws/events");
+  const token = getToken();
+  if (sock || typeof window === "undefined" || !token) return; // the socket needs a signed-in session
+  sock = new WebSocket(`${API_URL.replace(/^http/, "ws")}/ws/events?token=${encodeURIComponent(token)}`);
   sock.onopen = () => {
     retry = 0;
     setUp(true);
@@ -34,6 +35,20 @@ function connect() {
     setUp(false);
     setTimeout(connect, Math.min(5000, 500 * 2 ** retry++));
   };
+}
+
+// Signing in, out, or as someone else reopens the socket with the new session.
+if (typeof window !== "undefined") {
+  onTokenChange(() => {
+    if (sock) {
+      sock.onclose = null;
+      sock.close();
+      sock = null;
+      setUp(false);
+    }
+    retry = 0;
+    connect();
+  });
 }
 
 export function useEvents(handler: Handler) {

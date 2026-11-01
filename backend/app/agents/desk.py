@@ -18,9 +18,9 @@ from . import department
 MERGE_WINDOW = timedelta(hours=48)
 
 
-def recall_similar(db: Session, text: str, place_id: str, category: str, actor_id: str | None = None,
+async def recall_similar(db: Session, text: str, place_id: str, category: str, actor_id: str | None = None,
                    simulated: bool = False) -> tuple[Ticket | None, MekoResult]:
-    r = meko.recall(db, "desk", ["desk"], text, k=3, min_score=0.12, actor_id=actor_id, simulated=simulated,
+    r = await meko.recall(db, "desk", ["desk"], text, k=3, min_score=0.12, actor_id=actor_id, simulated=simulated,
                     where={"kind": "fingerprint", "status": "open", "place_id": place_id, "category": category})
     for item in r.items:
         t = db.get(Ticket, item["meta"].get("ticket_id"))
@@ -31,7 +31,7 @@ def recall_similar(db: Session, text: str, place_id: str, category: str, actor_i
 
 async def preview(db: Session, text: str, place_id: str) -> dict:
     cls = await llm.classify(get_settings(db), redact(text))
-    ticket, r = recall_similar(db, text, place_id, cls["category"])
+    ticket, r = await recall_similar(db, text, place_id, cls["category"])
     return {"category": cls["category"], "call_id": r.call_id, "meko_skipped": r.skipped,
             "similar": None if not ticket else {
                 "ticket_id": ticket.id, "title": ticket.title, "report_count": ticket.report_count,
@@ -45,7 +45,7 @@ async def handle_grievance(db: Session, user: User | None, text: str, place: Pla
     cls = await llm.classify(get_settings(db), red)
     category = cls["category"]
     reporter = user.id if user else "anonymous"
-    ticket, r = recall_similar(db, red, place.id, category, actor_id=reporter, simulated=simulated)
+    ticket, r = await recall_similar(db, red, place.id, category, actor_id=reporter, simulated=simulated)
 
     g = Grievance(user_id=user.id if user else None, raw_text_redacted=red, place_id=place.id, category=category,
                   photo_url=photo_url, created_at=clock.now())
@@ -56,7 +56,7 @@ async def handle_grievance(db: Session, user: User | None, text: str, place: Pla
         g.ticket_id = ticket.id
         db.commit()
         add_event(db, ticket, "person", reporter, f"Reported “{ticket.title}”", simulated=simulated)
-        note = meko.write(db, "desk", "desk", f"Merged report into {ticket.id}: {red}",
+        note = await meko.write(db, "desk", "desk", f"Merged report into {ticket.id}: {red}",
                           {"kind": "merge_note", "ticket_id": ticket.id}, ticket_id=ticket.id, simulated=simulated)
         add_event(db, ticket, "agent", "desk", f"Merged into {ticket.id}",
                   f"{ticket.report_count - 1} similar open reports at {place.name}", r.call_id, simulated)
@@ -72,7 +72,7 @@ async def handle_grievance(db: Session, user: User | None, text: str, place: Pla
     g.ticket_id = ticket.id
     db.commit()
     add_event(db, ticket, "person", reporter, f"Reported “{ticket.title}”", simulated=simulated)
-    fp = meko.write(db, "desk", "desk", f"{ticket.title}. {red}",
+    fp = await meko.write(db, "desk", "desk", f"{ticket.title}. {red}",
                     {"kind": "fingerprint", "ticket_id": ticket.id, "status": "open", "place_id": place.id,
                      "category": category}, ticket_id=ticket.id, simulated=simulated)
     why = "No similar open ticket found" if not r.skipped else "Meko is OFF, so no duplicate check"
@@ -91,7 +91,7 @@ async def route_to(db: Session, ticket: Ticket, place: Place, text: str, simulat
         add_message(db, "desk", "warden", f"{ticket.id}: needs triage ({ticket.title})", "write", ticket.id,
                     simulated=simulated)
         return
-    sh = meko.share(db, "desk", dept, f"dept-{dept}", f"New ticket {ticket.id} at {place.name}: {text}",
+    sh = await meko.share(db, "desk", dept, f"dept-{dept}", f"New ticket {ticket.id} at {place.name}: {text}",
                     {"kind": "handoff", "ticket_id": ticket.id}, ticket_id=ticket.id, simulated=simulated)
     tech = technician_for(db, dept)
     ticket.status = "assigned"
@@ -103,8 +103,8 @@ async def route_to(db: Session, ticket: Ticket, place: Place, text: str, simulat
     await department.on_new_ticket(db, ticket, simulated=simulated)
 
 
-def close_fingerprint(db: Session, ticket: Ticket, actor_id: str | None = None) -> None:
-    r = meko.recall(db, "desk", ["desk"], "", k=1, where={"kind": "fingerprint", "ticket_id": ticket.id},
+async def close_fingerprint(db: Session, ticket: Ticket, actor_id: str | None = None) -> None:
+    r = await meko.recall(db, "desk", ["desk"], "", k=1, where={"kind": "fingerprint", "ticket_id": ticket.id},
                     actor_id=actor_id, ticket_id=ticket.id)
     if r.items:
-        meko.update(db, "desk", r.items[0], {"status": "closed"}, ticket_id=ticket.id)
+        await meko.update(db, "desk", r.items[0], {"status": "closed"}, ticket_id=ticket.id)

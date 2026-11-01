@@ -1,9 +1,10 @@
 """The Meko adapter. Agents never call Meko directly; every call goes through here.
 
-Per call: 1) redact PII, 2) call Meko (or skip when Meko is OFF), 3) log a meko_calls row,
+Per call: 1) redact PII, 2) call Meko in a worker thread (or skip when Meko is OFF), 3) log a meko_calls row,
 4) publish a `meko.call` event, 5) return the result with its call_id attached.
 """
 
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -55,7 +56,7 @@ class MekoAdapter:
         bus.publish("meko.call", ser_call(call))
         return call
 
-    def _store(self, db: Session, op: str, actor: str, datapacks: list[str], text: str, meta: dict | None,
+    async def _store(self, db: Session, op: str, actor: str, datapacks: list[str], text: str, meta: dict | None,
                force: bool | None, **log) -> MekoResult:
         for dp in datapacks:
             if dp not in DATAPACKS:
@@ -67,7 +68,7 @@ class MekoAdapter:
             return MekoResult(c.id, skipped=True)
         t0, ids, error = time.perf_counter(), [], None
         try:
-            ids = [self.backend.add(dp, text, meta or {}) for dp in datapacks]
+            ids = [await asyncio.to_thread(self.backend.add, dp, text, meta or {}) for dp in datapacks]
         except Exception as exc:  # logged, counted as an error on the board
             error = f"{type(exc).__name__}: {exc}"
         c = self._log(db, actor=actor, op=op, datapack=dp_label, summary=text, result_ids=ids,
@@ -76,23 +77,23 @@ class MekoAdapter:
 
     # --- operations -------------------------------------------------------------------------
 
-    def write(self, db: Session, actor: str, datapack: str, text: str, meta: dict | None = None, *,
+    async def write(self, db: Session, actor: str, datapack: str, text: str, meta: dict | None = None, *,
               force: bool | None = None, **log) -> MekoResult:
-        return self._store(db, "write", actor, [datapack], text, meta, force, **log)
+        return await self._store(db, "write", actor, [datapack], text, meta, force, **log)
 
-    def share(self, db: Session, actor: str, target: str, datapack: str, text: str, meta: dict | None = None, *,
+    async def share(self, db: Session, actor: str, target: str, datapack: str, text: str, meta: dict | None = None, *,
               force: bool | None = None, **log) -> MekoResult:
-        return self._store(db, "share", actor, [datapack], text, meta, force, target=target, **log)
+        return await self._store(db, "share", actor, [datapack], text, meta, force, target=target, **log)
 
-    def directive(self, db: Session, actor: str, datapacks: list[str], text: str, meta: dict | None = None, *,
+    async def directive(self, db: Session, actor: str, datapacks: list[str], text: str, meta: dict | None = None, *,
                   force: bool | None = None, **log) -> MekoResult:
-        return self._store(db, "directive", actor, datapacks, text, meta, force, **log)
+        return await self._store(db, "directive", actor, datapacks, text, meta, force, **log)
 
-    def promote(self, db: Session, actor: str, text: str, meta: dict | None = None, *,
+    async def promote(self, db: Session, actor: str, text: str, meta: dict | None = None, *,
                 force: bool | None = None, **log) -> MekoResult:
-        return self._store(db, "promote", actor, ["campus-kb"], text, meta, force, target="campus-kb", **log)
+        return await self._store(db, "promote", actor, ["campus-kb"], text, meta, force, target="campus-kb", **log)
 
-    def recall(self, db: Session, actor: str, datapacks: list[str], query: str, *, k: int = 3,
+    async def recall(self, db: Session, actor: str, datapacks: list[str], query: str, *, k: int = 3,
                where: dict | None = None, min_score: float = 0.15, force: bool | None = None, **log) -> MekoResult:
         query = redact(query)
         label = ",".join(datapacks)
@@ -102,7 +103,7 @@ class MekoAdapter:
             return MekoResult(c.id, skipped=True)
         t0, items, error = time.perf_counter(), [], None
         try:
-            items = self.backend.search(datapacks, query, k, where, min_score)
+            items = await asyncio.to_thread(self.backend.search, datapacks, query, k, where, min_score)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
         c = self._log(db, actor=actor, op="recall", datapack=label, summary=summary,
@@ -112,7 +113,7 @@ class MekoAdapter:
             i["call_id"] = c.id
         return MekoResult(c.id, items=items, error=error)
 
-    def update(self, db: Session, actor: str, item: dict, patch: dict, *, force: bool | None = None,
+    async def update(self, db: Session, actor: str, item: dict, patch: dict, *, force: bool | None = None,
                **log) -> MekoResult:
         if not self.enabled(db, force):
             c = self._log(db, actor=actor, op="write", datapack=item["datapack"], summary=f"update {patch}",
@@ -120,7 +121,7 @@ class MekoAdapter:
             return MekoResult(c.id, skipped=True)
         error = None
         try:
-            self.backend.update_meta(item["id"], patch)
+            await asyncio.to_thread(self.backend.update_meta, item["id"], patch)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
         c = self._log(db, actor=actor, op="write", datapack=item["datapack"], summary=f"update {patch}",

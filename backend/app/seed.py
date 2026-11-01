@@ -3,6 +3,7 @@
 Run: python -m app.seed
 """
 
+import asyncio
 from datetime import timedelta
 
 from . import clock
@@ -11,8 +12,11 @@ from .meko_client import meko
 from .models import Approval, Grievance, Place, Setting, Ticket, User
 from .services import add_event, add_message
 from . import config
+from .auth import hash_password
 
 SIM = {"simulated": True}
+# Seeded users who can sign in (as <id>@demo.campus); listed on the sign-in page for the demo.
+DEMO_ACCOUNTS = ("S-1042", "S-1038", "S-1077", "TECH-WIFI", "TECH-ELEC", "TECH-WATER", "WARDEN-1", "DEAN-1")
 
 
 def _users(db):
@@ -31,20 +35,23 @@ def _users(db):
         User(id="WARDEN-1", role="warden", pseudonym="Warden"),
         User(id="DEAN-1", role="dean", pseudonym="Dean"),
     ])
+    for uid in DEMO_ACCOUNTS:
+        u = db.get(User, uid)
+        u.email, u.password_hash = f"{uid.lower()}@demo.campus", hash_password(config.DEMO_PASSWORD)
     db.commit()
 
 
-def _knowledge(db, now):
+async def _knowledge(db, now):
     old = now - timedelta(days=200)
-    meko.write(db, "wifi", "dept-wifi", "Hostel B 2nd floor router went offline in March. Cause: failed PSU, "
+    await meko.write(db, "wifi", "dept-wifi", "Hostel B 2nd floor router went offline in March. Cause: failed PSU, "
                "not the router. Fix: replaced the PSU.", {"kind": "fix", "place_id": "hostel-b"}, at=old, **SIM)
-    meko.write(db, "electricity", "dept-electricity", "Hostel A geyser not heating: replaced the heating element.",
+    await meko.write(db, "electricity", "dept-electricity", "Hostel A geyser not heating: replaced the heating element.",
                {"kind": "fix", "place_id": "hostel-a"}, at=old, **SIM)
-    meko.write(db, "water", "dept-water", "Mess RO dispenser slow: pre-filter clogged, replaced the pre-filter.",
+    await meko.write(db, "water", "dept-water", "Mess RO dispenser slow: pre-filter clogged, replaced the pre-filter.",
                {"kind": "fix", "place_id": "mess"}, at=old, **SIM)
     for text, cat in [("Router offline after a power cut → check the router PSU first.", "wifi"),
                       ("Mess drain blocked after weekend events → flush the lines on Monday.", "water")]:
-        meko.promote(db, "curator", text, {"kind": "lesson", "category": cat, "approved_by": "WARDEN-1"},
+        await meko.promote(db, "curator", text, {"kind": "lesson", "category": cat, "approved_by": "WARDEN-1"},
                      at=old, **SIM)
     patterns = [
         ("RO filters fail every ~40 days in both hostels", "water", "Every ~40 days",
@@ -57,11 +64,11 @@ def _knowledge(db, now):
          [20, 60, 25, 20, 70, 30, 25, 75, 30, 22, 80, 28]),
     ]
     for text, cat, stat, series in patterns:
-        meko.promote(db, "curator", text, {"kind": "pattern", "verified": True, "approved_by": "WARDEN-1",
+        await meko.promote(db, "curator", text, {"kind": "pattern", "verified": True, "approved_by": "WARDEN-1",
                                            "category": cat, "stat": stat, "series": series}, at=old, **SIM)
 
 
-def _open_ticket(db, now, *, tid, title, cat, place, minutes_ago, reporters, eta_in, text):
+async def _open_ticket(db, now, *, tid, title, cat, place, minutes_ago, reporters, eta_in, text):
     created = now - timedelta(minutes=minutes_ago)
     tech = {"wifi": "TECH-WIFI", "electricity": "TECH-ELEC", "water": "TECH-WATER"}[cat]
     t = Ticket(id=tid, title=title, category=cat, place_id=place, status="assigned", assignee_id=tech,
@@ -73,14 +80,14 @@ def _open_ticket(db, now, *, tid, title, cat, place, minutes_ago, reporters, eta
     db.commit()
     at = lambda m: created + timedelta(minutes=m)  # noqa: E731
     add_event(db, t, "person", reporters[0], f"Reported “{title}”", at=at(0), **SIM)
-    fp = meko.write(db, "desk", "desk", f"{title}. {text}", {"kind": "fingerprint", "ticket_id": tid,
+    fp = await meko.write(db, "desk", "desk", f"{title}. {text}", {"kind": "fingerprint", "ticket_id": tid,
                     "status": "open", "place_id": place, "category": cat}, ticket_id=tid, at=at(1), **SIM)
     add_event(db, t, "agent", "desk", f"Created {tid}, tagged {cat}", "No similar open ticket found", fp.call_id,
               at=at(1), **SIM)
-    sh = meko.share(db, "desk", cat, f"dept-{cat}", f"New ticket {tid}: {text}", {"kind": "handoff",
+    sh = await meko.share(db, "desk", cat, f"dept-{cat}", f"New ticket {tid}: {text}", {"kind": "handoff",
                     "ticket_id": tid}, ticket_id=tid, at=at(1), **SIM)
     add_message(db, "desk", cat, f"{tid} routed: {title}", "share", tid, sh.call_id, at=at(1), **SIM)
-    r = meko.recall(db, cat, [f"dept-{cat}", "campus-kb"], f"{title} {text}", k=3,
+    r = await meko.recall(db, cat, [f"dept-{cat}", "campus-kb"], f"{title} {text}", k=3,
                     where={"kind": ["fix", "lesson", "note"]}, ticket_id=tid, at=at(2), **SIM)
     if r.items:
         t.suggestion, t.suggestion_call_id = r.items[0]["text"], r.call_id
@@ -89,7 +96,7 @@ def _open_ticket(db, now, *, tid, title, cat, place, minutes_ago, reporters, eta
                   r.call_id, at=at(2), **SIM)
         add_message(db, cat, "technician", f"{tid} flag: {r.items[0]['text']}", "recall", tid, r.call_id, at=at(2),
                     **SIM)
-    w = meko.write(db, cat, f"dept-{cat}", f"ETA for {tid} set to {t.eta:%a %H:%M}", {"kind": "eta",
+    w = await meko.write(db, cat, f"dept-{cat}", f"ETA for {tid} set to {t.eta:%a %H:%M}", {"kind": "eta",
                    "ticket_id": tid}, ticket_id=tid, at=at(3), **SIM)
     add_event(db, t, "agent", cat, f"ETA set to {t.eta:%a %H:%M}", None, w.call_id, at=at(3), **SIM)
     if len(reporters) > 1:
@@ -111,25 +118,29 @@ def _history(db, now):
 
 
 def seed() -> None:
+    asyncio.run(_seed())
+
+
+async def _seed() -> None:
     clock.set_offset(0)
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
-    meko.backend.reset()
+    await asyncio.to_thread(meko.backend.reset)
     now = clock.now()
     with SessionLocal() as db:
         db.add(Setting(id=1, llm_base_url=config.LLM_BASE_URL, model=config.LLM_MODEL, llm_enabled=True,
                        meko_enabled=True, clock_offset_minutes=0))
         db.commit()
         _users(db)
-        _knowledge(db, now)
+        await _knowledge(db, now)
         _history(db, now)
-        _open_ticket(db, now, tid="T-074", title="Wi-Fi down on 2nd floor", cat="wifi", place="hostel-b",
+        await _open_ticket(db, now, tid="T-074", title="Wi-Fi down on 2nd floor", cat="wifi", place="hostel-b",
                      minutes_ago=25, reporters=[f"S-{n}" for n in range(1101, 1115)], eta_in=95,
                      text="Wi-Fi not working on the 2nd floor of Hostel B, router lights off")
-        _open_ticket(db, now, tid="T-079", title="RO water dispenser very slow", cat="water", place="mess",
+        await _open_ticket(db, now, tid="T-079", title="RO water dispenser very slow", cat="water", place="mess",
                      minutes_ago=300, reporters=[f"S-{n}" for n in range(1101, 1107)], eta_in=120,
                      text="RO water dispenser in the mess is very slow")
-        _open_ticket(db, now, tid="T-081", title="Geyser not heating in Hostel B", cat="electricity",
+        await _open_ticket(db, now, tid="T-081", title="Geyser not heating in Hostel B", cat="electricity",
                      place="hostel-b", minutes_ago=120, reporters=["S-1107", "S-1108", "S-1109"], eta_in=60,
                      text="Geyser on 1st floor of Hostel B is not heating")
         log = meko.log_approval(db, "curator", "Proposed lesson: Slow RO water → replace the pre-filter before "

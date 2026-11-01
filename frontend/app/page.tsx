@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useRole } from "@/components/RoleProvider";
-import { HOME } from "@/components/TopBar";
+import { HOME } from "@/lib/roles";
 
 export default function Index() {
   const { role } = useRole();

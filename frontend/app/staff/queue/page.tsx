@@ -6,32 +6,27 @@ import { TicketPanel } from "@/components/TicketPanel";
 import { CategoryChip, Chip, Empty, ErrorNote, PageHeading, cx } from "@/components/ui";
 import { api } from "@/lib/api";
 import { etaLabel } from "@/lib/format";
-import type { Ticket, User } from "@/lib/types";
+import type { Ticket } from "@/lib/types";
 import { useEvents } from "@/lib/ws";
 
 export default function QueuePage() {
-  const { role, userId, setUserId, settings } = useRole();
+  const { role, settings } = useRole();
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
-  const [techs, setTechs] = useState<User[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const staffRole = role === "warden" ? "warden" : "technician";
   const refetchTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const load = useCallback(() => {
-    const q = staffRole === "technician" ? `role=technician&user_id=${userId}` : "role=warden";
-    api<Ticket[]>(`/staff/queue?${q}`)
+    api<Ticket[]>(`/staff/queue?role=${staffRole}`)
       .then((ts) => {
         setTickets(ts);
         setSelected((s) => (s && ts.some((t) => t.id === s) ? s : ts[0]?.id ?? null));
       })
       .catch((e: Error) => setError(e.message));
-  }, [staffRole, userId]);
+  }, [staffRole]);
 
   useEffect(load, [load]);
-  useEffect(() => {
-    api<User[]>("/users?role=technician").then(setTechs).catch(() => {});
-  }, []);
 
   // Live: any ticket change refreshes the list (debounced so a burst of agent steps refetches once).
   useEvents((e) => {
@@ -46,24 +41,8 @@ export default function QueuePage() {
         <PageHeading
           title="Queue"
           sub={tickets ? `${tickets.length} open tickets · sorted by reports, then ETA` : "Loading…"}
-          right={
-            role === "technician" && (
-              <select
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium"
-                aria-label="Technician"
-              >
-                {techs.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            )
-          }
         />
-        {role !== "technician" && role !== "warden" && <p className="text-sm text-gray-500">Viewing as Warden. Switch role to Technician or Warden to act.</p>}
+        {role !== "technician" && role !== "warden" && <p className="text-sm text-gray-500">Viewing as Warden. Only technicians and wardens can act on tickets.</p>}
         <ErrorNote error={error} />
         {tickets?.length === 0 && <Empty>Nothing open. Nice.</Empty>}
         {tickets?.map((t) => (

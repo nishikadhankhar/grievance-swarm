@@ -9,8 +9,10 @@ from .. import clock
 from ..agents import department
 from ..db import get_db
 from ..meko_client import meko
+from ..auth import current_user
 from ..models import Directive, User
 from ..services import add_message
+from . import require_role
 
 router = APIRouter(tags=["directives"])
 
@@ -20,7 +22,6 @@ class DirectiveIn(BaseModel):
     hostel: str = Field(description="hostel-a, hostel-b or all")
     message: str = Field(min_length=3, max_length=300)
     valid_to: str = Field(description="HH:MM today (or tomorrow if already past), or an ISO datetime")
-    user_id: str | None = None
     simulated: bool = False
 
 
@@ -37,17 +38,16 @@ def _parse_until(value: str) -> datetime:
 
 
 @router.post("/events/directive", status_code=201)
-async def post_directive(body: DirectiveIn, db: Session = Depends(get_db)):
-    if body.user_id and db.get(User, body.user_id) is None:
-        raise HTTPException(404, f"Unknown user {body.user_id}")
+async def post_directive(body: DirectiveIn, me: User = Depends(current_user), db: Session = Depends(get_db)):
+    require_role(me, ("technician", "warden"))
     until = _parse_until(body.valid_to)
     # Directive/share: written into every department datapack so each agent reads it with its own recall.
-    r = meko.directive(db, body.department, [f"dept-{d}" for d in ("electricity", "wifi", "water")], body.message,
+    r = await meko.directive(db, body.department, [f"dept-{d}" for d in ("electricity", "wifi", "water")], body.message,
                        {"kind": "directive", "hostel": body.hostel, "department": body.department,
                         "valid_to": until.isoformat()},
-                       actor_id=body.user_id, target="technician", simulated=body.simulated)
+                       actor_id=me.id, target="technician", simulated=body.simulated)
     d = Directive(department=body.department, hostel=body.hostel, message=body.message, valid_from=clock.now(),
-                  valid_to=until, posted_by=body.user_id, meko_call_id=r.call_id, simulated=body.simulated)
+                  valid_to=until, posted_by=me.id, meko_call_id=r.call_id, simulated=body.simulated)
     db.add(d)
     db.commit()
     add_message(db, body.department, "technician", body.message, "directive", meko_call_id=r.call_id,

@@ -26,18 +26,18 @@ def _hostel(db: Session, ticket: Ticket) -> str | None:
     return place.hostel if place else None
 
 
-def recall_fixes(db: Session, ticket: Ticket, simulated: bool = False, force: bool | None = None):
+async def recall_fixes(db: Session, ticket: Ticket, simulated: bool = False, force: bool | None = None):
     text = " ".join([ticket.title] + db.scalars(
         select(Grievance.raw_text_redacted).where(Grievance.ticket_id == ticket.id).limit(3)).all())
-    return meko.recall(db, ticket.category, [dp(ticket.category), "campus-kb"], text, k=3, min_score=0.15,
+    return await meko.recall(db, ticket.category, [dp(ticket.category), "campus-kb"], text, k=3, min_score=0.15,
                        where={"kind": ["fix", "lesson", "note"]}, ticket_id=ticket.id, simulated=simulated,
                        force=force)
 
 
-def read_directives(db: Session, ticket: Ticket, query: str = "", simulated: bool = False):
+async def read_directives(db: Session, ticket: Ticket, query: str = "", simulated: bool = False):
     """Returns (hold_until, directive_text, call_id) for the latest active power directive, or Nones."""
     hostel = _hostel(db, ticket)
-    r = meko.recall(db, ticket.category, [dp(ticket.category)], query, k=5, min_score=0.0,
+    r = await meko.recall(db, ticket.category, [dp(ticket.category)], query, k=5, min_score=0.0,
                     where={"kind": "directive", "hostel": [hostel, "all"]}, ticket_id=ticket.id,
                     simulated=simulated)
     now = clock.now()
@@ -50,7 +50,7 @@ def read_directives(db: Session, ticket: Ticket, query: str = "", simulated: boo
 
 
 async def on_new_ticket(db: Session, ticket: Ticket, simulated: bool = False) -> None:
-    r = recall_fixes(db, ticket, simulated)
+    r = await recall_fixes(db, ticket, simulated)
     if r.items:
         top = r.items[0]
         ticket.suggestion, ticket.suggestion_call_id = top["text"], r.call_id
@@ -66,13 +66,13 @@ async def on_new_ticket(db: Session, ticket: Ticket, simulated: bool = False) ->
 async def set_eta(db: Session, ticket: Ticket, base: datetime | None = None, reason: str | None = None,
                   simulated: bool = False, notify_all: bool = False) -> None:
     eta = base or clock.now() + timedelta(hours=BASE_HOURS.get(ticket.category, 4))
-    hold_until, hold_text, read_id = read_directives(db, ticket, simulated=simulated)
+    hold_until, hold_text, read_id = await read_directives(db, ticket, simulated=simulated)
     if hold_until and eta < hold_until + HOLD_BUFFER:
         eta = hold_until + HOLD_BUFFER
         reason = f"Delayed because of a power cut until {hold_until:%H:%M}"
     ticket.eta, ticket.eta_reason = eta, reason
     db.commit()
-    w = meko.write(db, ticket.category, dp(ticket.category),
+    w = await meko.write(db, ticket.category, dp(ticket.category),
                    f"ETA for {ticket.id} set to {eta:%a %H:%M}" + (f" because: {reason}" if reason else ""),
                    {"kind": "eta", "ticket_id": ticket.id}, ticket_id=ticket.id, simulated=simulated)
     add_event(db, ticket, "agent", ticket.category, f"ETA set to {eta:%a %H:%M}", reason,
@@ -84,7 +84,7 @@ async def set_eta(db: Session, ticket: Ticket, base: datetime | None = None, rea
 
 async def on_note(db: Session, ticket: Ticket, user: User, note: str) -> None:
     """Person → agent hand-off: a staff note is written to Meko, then the agent reacts to it."""
-    w = meko.write(db, "technician", dp(ticket.category), f"{ticket.id} note: {note}",
+    w = await meko.write(db, "technician", dp(ticket.category), f"{ticket.id} note: {note}",
                    {"kind": "note", "ticket_id": ticket.id}, actor_id=user.id, target=ticket.category,
                    ticket_id=ticket.id)
     add_event(db, ticket, "person", user.id, f"Note: “{note}”", meko_call_id=w.call_id)
@@ -103,13 +103,13 @@ async def apply_directive(db: Session, directive: Directive, simulated: bool = F
     for t in tickets:
         if directive.hostel != "all" and _hostel(db, t) != directive.hostel:
             continue
-        hold_until, _, read_id = read_directives(db, t, directive.message, simulated)
+        hold_until, _, read_id = await read_directives(db, t, directive.message, simulated)
         if not hold_until or (t.eta and t.eta >= hold_until + HOLD_BUFFER):
             continue
         t.eta = hold_until + HOLD_BUFFER
         t.eta_reason = f"Delayed because of a power cut until {hold_until:%H:%M}"
         db.commit()
-        w = meko.write(db, t.category, dp(t.category), f"Hold {t.id} until {t.eta:%H:%M}: {directive.message}",
+        w = await meko.write(db, t.category, dp(t.category), f"Hold {t.id} until {t.eta:%H:%M}: {directive.message}",
                        {"kind": "hold", "ticket_id": t.id}, ticket_id=t.id, simulated=simulated)
         add_event(db, t, "agent", t.category, f"Held until {t.eta:%H:%M}", t.eta_reason, read_id, simulated)
         add_message(db, t.category, "students", f"{t.id}: ETA {t.eta:%H:%M} — {t.eta_reason}", "write", t.id,

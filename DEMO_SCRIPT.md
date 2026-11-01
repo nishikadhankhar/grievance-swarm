@@ -8,7 +8,12 @@ they ask.
 - `make seed`, then `make run` and `make web` in two terminals.
 - Open two browser tabs: **Tab A** at `localhost:3000` (you click here) and **Tab B** at `localhost:3000/swarm`
   (put it on the second screen if you have one, so the board animates while you work).
+- Sign in on Tab A with the **S-1042** demo button. You switch people with the **account menu** (your name,
+  top right): it lists every demo account, one click each. Tab B can stay signed in as anyone.
 - Check the top bar says **Live** (green) and **Meko ON**.
+- On real Meko (`MEKO_BACKEND=real`), each recall takes about 8 s, so submitting a report takes about 20 s.
+  Fill the pause by pointing at Tab B: the board lights up as each Meko call lands. Keep the Meko dashboard
+  open in a third tab to show the memories arriving in `gs-dept-wifi` and the other datapacks.
 - Pick a power-cut end time about 1–2 hours from now (e.g. if it's 20:10, use 22:00).
 
 ---
@@ -23,7 +28,7 @@ memory, Meko, where agents route and remember, and people make every decision th
 
 ## 0:20 — A student reports a problem (Flow 1)
 
-**Do:** Tab A, role **Student**, page **Report a problem**. Type
+**Do:** Tab A, signed in as **S-1042**, page **Report a problem**. Type
 `Wi-Fi is dead on the 2nd floor of Hostel B since evening`. Location: **Hostel B**.
 
 **Say:** "The student writes in their own words. No forms, no categories."
@@ -50,7 +55,7 @@ context. If Meko didn't return it, it isn't shown."
 
 ## 1:00 — Hand-offs both ways (Flow 2)
 
-**Do:** Switch role to **Technician**. The queue shows T-074 with an orange agent line.
+**Do:** Account menu → **Technician · Wi-Fi**. The queue shows T-074 with an orange agent line.
 
 **Say:** "Agent to person: the Wi-Fi agent remembered that this same router failed in March and the cause was
 the power supply, so the technician checks that first."
@@ -86,14 +91,14 @@ Hostel B is put on hold automatically, and students see why: 'Delayed because of
 
 **Case 1, Hostel A:**
 
-1. **Student**, posting as **S-1038**, location **Hostel A**: `Geyser keeps tripping in room 214` → Submit.
-2. **Technician**, choose **Technician · Electricity** in the dropdown, open the new ticket. Note:
+1. Account menu → **S-1038**, location **Hostel A**: `Geyser keeps tripping in room 214` → Submit.
+2. Account menu → **Technician · Electricity**, open the new ticket. Note:
    `16A breaker was tripping, replaced the breaker` → **Close**.
 
 **Say:** "The technician closes it with what they actually did. The Curator agent turns that into a lesson,
 but it does **not** go into campus memory on its own."
 
-3. **Warden → Approvals.** Click **Approve** on the new lesson.
+3. Account menu → **Warden**, then **Approvals**. Click **Approve** on the new lesson.
 
 **Say:** "Only a person can promote knowledge. The Warden approves, and it slides into Campus Knowledge."
 
@@ -103,7 +108,7 @@ but it does **not** go into campus memory on its own."
 **Case 2, days later, different hostel:**
 
 4. Gear icon → **Demo clock → +3 days**.
-5. **Student**, posting as **S-1077**, location **Hostel B**: `Geyser tripping again in my room` → Submit.
+5. Account menu → **S-1077**, location **Hostel B**: `Geyser tripping again in my room` → Submit.
 
 **Say:** "Three days later, a different student in a different hostel. The Electricity agent recalls the
 approved lesson and tells the technician to check the 16A breaker first. That's one visit instead of two."
@@ -148,7 +153,7 @@ and the campus gets smarter every time something is fixed."
 
 | Question | Answer |
 |---|---|
-| Is this real Meko? | Every call goes through one adapter file. Today it runs on a local stand-in so the demo works offline; switching to the Meko SDK changes only that one class. *(Say this honestly. Don't claim it's live Meko until RealMeko is filled in.)* |
+| Is this real Meko? | With `MEKO_BACKEND=real`, yes: every write is a Meko `memory_add` and every recall a `memory_search` over its MCP server, into datapacks `gs-desk`, `gs-dept-wifi`… that you can open in the Meko dashboard. Labels like "open/closed" live in a small local index, because Meko's search can't filter on them. *(If you demo on `local`, say it's the offline stand-in.)* |
 | What's the AI model? | Any OpenAI-compatible model, Qwen3 8B on Ollama by default. If no model is reachable it falls back to rules, so the demo never stalls. |
 | Can an agent close a ticket or escalate on its own? | No. Closing, approving lessons and verifying patterns are always done by a person. |
 | Privacy? | Students are pseudonyms; names, phone numbers, emails and roll numbers are stripped before Meko or any prompt. |
@@ -159,7 +164,8 @@ and the campus gets smarter every time something is fixed."
 
 | Screen | What it does |
 |---|---|
-| Top bar | Role switcher (no login), Meko ON/OFF, Swarm button, Live indicator, demo settings |
+| Sign in / Sign up | Students: email, password, hostel → pseudonym. Staff: name, role, staff code. Demo accounts one click |
+| Top bar | Account menu (switch demo account, sign out), Meko ON/OFF, Swarm button, Live indicator, demo settings |
 | Report a problem | Free-text complaint, location, optional photo; live duplicate check before submit |
 | My ticket | Status steps, ETA with reason, timeline with Person/Agent badges and Meko context chips; updates live |
 | Queue | Technician's or Warden's open tickets with agent suggestions; Accept, Override (needs a reason), Close, Save note |

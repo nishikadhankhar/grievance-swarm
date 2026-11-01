@@ -13,6 +13,15 @@ class User(Base):
     pseudonym: Mapped[str] = mapped_column(String(64))
     hostel: Mapped[str | None] = mapped_column(String(32), nullable=True)
     department: Mapped[str | None] = mapped_column(String(16), nullable=True)  # technicians only
+    email: Mapped[str | None] = mapped_column(String(254), unique=True, nullable=True)  # None: can't sign in
+    password_hash: Mapped[str | None] = mapped_column(String(160), nullable=True)
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)  # sha256 of the bearer token
+    user_id: Mapped[str] = mapped_column(String(32), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
 
 
 class Place(Base):

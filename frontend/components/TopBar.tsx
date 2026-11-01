@@ -2,24 +2,91 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { Role } from "@/lib/types";
+import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
+import { HOME, ROLE_LABEL } from "@/lib/roles";
+import type { Me, Role } from "@/lib/types";
 import { useSocketUp } from "@/lib/ws";
-import { useRole } from "./RoleProvider";
+import { AUTH_PAGES, useRole } from "./RoleProvider";
 import { cx } from "./ui";
 
-const ROLES: { id: Role; label: string }[] = [
-  { id: "student", label: "Student" },
-  { id: "technician", label: "Technician" },
-  { id: "warden", label: "Warden" },
-  { id: "dean", label: "Dean" },
-];
+export { HOME };
 
-export const HOME: Record<Role, string> = {
-  student: "/student/new",
-  technician: "/staff/queue",
-  warden: "/staff/queue",
-  dean: "/dean",
-};
+interface DemoAccounts {
+  password: string | null;
+  accounts: Me[];
+}
+
+export function useDemoAccounts(): DemoAccounts | null {
+  const [demo, setDemo] = useState<DemoAccounts | null>(null);
+  useEffect(() => {
+    api<DemoAccounts>("/auth/demo-accounts").then(setDemo).catch(() => setDemo(null));
+  }, []);
+  return demo;
+}
+
+function AccountMenu() {
+  const { user, signIn, signOut } = useRole();
+  const router = useRouter();
+  const demo = useDemoAccounts();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  if (!user) return null;
+  const others = demo?.accounts.filter((a) => a.id !== user.id) ?? [];
+
+  async function switchTo(a: Me) {
+    setOpen(false);
+    const me = await signIn(a.email ?? "", demo?.password ?? "");
+    router.push(HOME[me.role]);
+  }
+
+  return (
+    <div className="relative" ref={box}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-1.5 pl-1.5 pr-3 text-[13px] font-medium hover:border-gray-300"
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500 text-xs font-bold text-white">
+          {user.name.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase()}
+        </span>
+        <span className="max-w-[160px] truncate">{user.name}</span>
+        <span className="text-gray-500">· {ROLE_LABEL[user.role]}</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-40 mt-2 w-72 rounded-2xl border border-gray-200 bg-white p-2 shadow-lg" role="menu">
+          <div className="px-3 py-2">
+            <p className="text-sm font-semibold">{user.name}</p>
+            <p className="truncate text-xs text-gray-500">{user.email}</p>
+          </div>
+          {others.length > 0 && (
+            <>
+              <p className="border-t border-gray-100 px-3 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Switch demo account</p>
+              {others.map((a) => (
+                <button key={a.id} onClick={() => switchTo(a)} className="flex w-full items-center rounded-lg px-3 py-1.5 text-left text-[13px] hover:bg-gray-50" role="menuitem">
+                  <span className="flex-1">{a.name}</span>
+                  <span className="text-xs text-gray-500">{ROLE_LABEL[a.role as Role]}</span>
+                </button>
+              ))}
+            </>
+          )}
+          <button onClick={signOut} className="mt-1 w-full rounded-lg border-t border-gray-100 px-3 py-2 text-left text-[13px] font-medium text-red-700 hover:bg-red-50" role="menuitem">
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const COMPARE = { label: "Meko ON vs OFF", href: "/compare" };
 const TABS: Record<Role, { label: string; href: string }[]> = {
@@ -53,11 +120,11 @@ export function MekoToggle() {
 }
 
 export function TopBar() {
-  const { role, setRole } = useRole();
-  const router = useRouter();
+  const { role, user } = useRole();
   const path = usePathname();
   const live = useSocketUp();
   const onSwarm = path.startsWith("/swarm");
+  if (!user || AUTH_PAGES.some((p) => path.startsWith(p))) return null;
 
   return (
     <header className="sticky top-0 z-30 bg-white">
@@ -74,20 +141,6 @@ export function TopBar() {
           {live ? "Live" : "Offline"}
         </span>
         <div className="flex-1" />
-        <nav className="flex rounded-xl border border-gray-200 bg-gray-50 p-[3px]" aria-label="Role">
-          {ROLES.map((r) => (
-            <button
-              key={r.id}
-              onClick={() => {
-                setRole(r.id);
-                router.push(HOME[r.id]);
-              }}
-              className={cx("rounded-[9px] px-3.5 py-1.5 text-[13px] font-medium", r.id === role ? "bg-orange-500 text-white" : "text-gray-500 hover:text-gray-900")}
-            >
-              {r.label}
-            </button>
-          ))}
-        </nav>
         <MekoToggle />
         <Link
           href="/swarm"
@@ -95,6 +148,7 @@ export function TopBar() {
         >
           Swarm
         </Link>
+        <AccountMenu />
         <Link href="/settings" className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Demo settings" aria-label="Demo settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <circle cx="12" cy="12" r="3" />

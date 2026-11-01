@@ -123,6 +123,11 @@ export interface User {
   department: string | null;
 }
 
+/** The signed-in account (GET /auth/me). Students' `name` is their pseudonym. */
+export interface Me extends User {
+  email: string | null;
+}
+
 export type BusEvent =
   | { type: "hello"; data: Record<string, never> }
   | { type: "ticket.updated"; data: { ticket: Ticket; event: TicketEvent } }

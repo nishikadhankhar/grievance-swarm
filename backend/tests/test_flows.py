@@ -10,20 +10,54 @@ from datetime import datetime, timedelta
 _tmp = tempfile.mkdtemp()
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
 os.environ["MEKO_LOCAL_PATH"] = f"{_tmp}/meko.db"
-os.environ["MEKO_BACKEND"] = "local"
+# TEST_MEKO_BACKEND=real runs the same flows against real Meko (slow: ~8 s per recall; needs MEKO_API_KEY).
+os.environ["MEKO_BACKEND"] = os.getenv("TEST_MEKO_BACKEND", "local")
+os.environ["MEKO_INDEX_PATH"] = f"{_tmp}/meko_index.db"
 os.environ["LLM_BASE_URL"] = "http://127.0.0.1:9/v1"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app import config  # noqa: E402
 from app.main import app  # noqa: E402
 from app.seed import seed  # noqa: E402
+
+
+class SignedInClient(TestClient):
+    """Signs each request in as the body's `user_id` (else `default_user`), as the browser does after sign-in.
+
+    The API ignores `user_id` in bodies; who you are comes only from the session token.
+    """
+
+    default_user = "WARDEN-1"
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.tokens: dict[str, str] = {}
+
+    def token(self, uid: str) -> str:
+        if uid not in self.tokens:
+            r = super().request("POST", "/auth/signin", json={"email": f"{uid.lower()}@demo.campus",
+                                                              "password": config.DEMO_PASSWORD})
+            assert r.status_code == 200, r.text
+            self.tokens[uid] = r.json()["token"]
+        return self.tokens[uid]
+
+    def request(self, method, url, **kw):
+        body = kw.get("json")
+        uid = (body.get("user_id") if isinstance(body, dict) else None) or self.default_user
+        if not str(url).startswith("/auth") and uid:
+            kw["headers"] = {"Authorization": f"Bearer {self.token(uid)}", **(kw.get("headers") or {})}
+        return super().request(method, url, **kw)
+
+    def websocket_connect(self, url, *a, **kw):
+        return super().websocket_connect(f"{url}?token={self.token(self.default_user)}", *a, **kw)
 
 
 @pytest.fixture()
 def client():
     seed()
-    with TestClient(app) as c:
+    with SignedInClient(app) as c:
         yield c
 
 
@@ -145,3 +179,52 @@ def test_swarm_graph_and_counters(client):
     ids = {n["id"] for n in g["nodes"]}
     assert {"student", "technician", "warden", "dean", "desk", "wifi", "curator", "meko", "campus-kb"} <= ids
     assert set(g["counters"]) >= {"notes", "reads", "promotions", "directives", "approvals", "errors"}
+
+
+def test_signup_and_signin(client):
+    anon = TestClient(app)
+    assert anon.get("/tickets/T-074").status_code == 401
+    assert anon.post("/grievances", json={"text": "Lights out", "place_id": "library"}).status_code == 401
+
+    r = anon.post("/auth/signup", json={"kind": "student", "email": "New.Student@college.edu",
+                                        "password": "longenough", "hostel": "hostel-a"})
+    assert r.status_code == 201, r.text
+    me = r.json()["user"]
+    assert me["role"] == "student" and me["id"] == me["name"] == "S-1201" and me["email"] == "new.student@college.edu"
+    h = {"Authorization": f"Bearer {r.json()['token']}"}
+    assert anon.get("/auth/me", headers=h).json()["id"] == "S-1201"
+    sub = anon.post("/grievances", headers=h, json={"text": "Library lights flickering", "place_id": "library"})
+    assert sub.status_code == 201
+    assert anon.get("/students/S-1201/tickets", headers=h).json()[0]["id"] == sub.json()["ticket"]["id"]
+    assert anon.get("/students/S-1042/tickets", headers=h).status_code == 403  # not their tickets
+    assert anon.post("/approvals/1", headers=h, json={"decision": "approve"}).status_code == 403
+
+    assert anon.post("/auth/signup", json={"kind": "student", "email": "new.student@college.edu",
+                                           "password": "longenough", "hostel": "hostel-a"}).status_code == 409
+    assert anon.post("/auth/signin", json={"email": "new.student@college.edu", "password": "wrong-one"}).status_code == 401
+    assert anon.post("/auth/signin", json={"email": "NEW.student@college.edu", "password": "longenough"}).status_code == 200
+    anon.post("/auth/signout", headers=h)
+    assert anon.get("/auth/me", headers=h).status_code == 401
+
+
+def test_staff_signup_needs_the_staff_code(client):
+    anon = TestClient(app)
+    staff = {"kind": "staff", "email": "plumber@college.edu", "password": "longenough", "name": "Ravi (Water)",
+             "role": "technician", "department": "water"}
+    assert anon.post("/auth/signup", json={**staff, "staff_code": "guess"}).status_code == 403
+    r = anon.post("/auth/signup", json={**staff, "staff_code": config.STAFF_SIGNUP_CODE})
+    assert r.status_code == 201, r.text
+    assert r.json()["user"] | {"id": "TECH-2", "role": "technician", "department": "water", "name": "Ravi (Water)"} \
+        == r.json()["user"]
+    h = {"Authorization": f"Bearer {r.json()['token']}"}
+    assert anon.post("/tickets/T-079/notes", headers=h, json={"text": "On my way"}).status_code == 201
+    dean = anon.post("/auth/signup", json={**staff, "email": "d2@college.edu", "role": "dean", "department": None,
+                                           "staff_code": config.STAFF_SIGNUP_CODE}).json()["user"]
+    assert dean["id"] == "DEAN-2" and dean["department"] is None
+
+
+def test_websocket_needs_a_session(client):
+    from starlette.websockets import WebSocketDisconnect
+    with pytest.raises(WebSocketDisconnect):
+        with TestClient(app).websocket_connect("/ws/events") as ws:
+            ws.receive_json()

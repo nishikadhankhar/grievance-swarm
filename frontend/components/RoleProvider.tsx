@@ -1,84 +1,112 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api } from "@/lib/api";
-import type { Role, Settings } from "@/lib/types";
+import { usePathname, useRouter } from "next/navigation";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { api, getToken, onTokenChange, setToken } from "@/lib/api";
+import { HOME } from "@/lib/roles";
+import type { Me, Role, Settings } from "@/lib/types";
 import { useEvents } from "@/lib/ws";
 
-// Demo login: a role switcher plus a pseudonymous user per role. Stored in the browser only.
-const DEFAULT_USER: Record<Role, string> = {
-  student: "S-1042",
-  technician: "TECH-WIFI",
-  warden: "WARDEN-1",
-  dean: "DEAN-1",
-};
+// Pages anyone can open; everything else needs a signed-in account.
+export const AUTH_PAGES = ["/signin", "/signup"];
+
+export interface SignUpBody {
+  kind: "student" | "staff";
+  email: string;
+  password: string;
+  hostel?: string;
+  name?: string;
+  role?: Exclude<Role, "student">;
+  department?: string;
+  staff_code?: string;
+}
 
 interface Ctx {
+  user: Me | null;
   role: Role;
   userId: string;
-  setRole: (r: Role) => void;
-  setUserId: (id: string) => void;
+  signIn: (email: string, password: string) => Promise<Me>;
+  signUp: (body: SignUpBody) => Promise<Me>;
+  signOut: () => Promise<void>;
   settings: Settings | null;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
 }
 
 const RoleContext = createContext<Ctx | null>(null);
 
-function load<T>(key: string, fallback: T): T {
-  try {
-    const v = localStorage.getItem(key);
-    return v ? (JSON.parse(v) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [role, setRoleState] = useState<Role>("student");
-  const [users, setUsers] = useState<Record<Role, string>>(DEFAULT_USER);
+  const [user, setUser] = useState<Me | null>(null);
+  const [ready, setReady] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const router = useRouter();
+  const path = usePathname();
+  const onAuthPage = AUTH_PAGES.some((p) => path.startsWith(p));
+  const signingOut = useRef(false);
+
+  // Load the account for the stored token, and drop it whenever the token goes away (e.g. a 401).
+  useEffect(() => {
+    const sync = () => {
+      if (!getToken()) {
+        setUser(null);
+        setReady(true);
+        return;
+      }
+      api<Me>("/auth/me")
+        .then(setUser)
+        .catch(() => setUser(null))
+        .finally(() => setReady(true));
+    };
+    sync();
+    return onTokenChange(sync);
+  }, []);
 
   useEffect(() => {
-    setRoleState(load<Role>("cgs.role", "student"));
-    setUsers(load("cgs.users", DEFAULT_USER));
-    api<Settings>("/settings").then(setSettings).catch(() => setSettings(null));
-  }, []);
+    if (!ready) return;
+    // After a sign-out, don't send the next person back to the page the last one was on.
+    if (!user && !onAuthPage) router.replace(signingOut.current ? "/signin" : `/signin?next=${encodeURIComponent(path)}`);
+    if (onAuthPage) signingOut.current = false;
+    if (user && onAuthPage) router.replace(HOME[user.role]);
+  }, [ready, user, onAuthPage, path, router]);
+
+  useEffect(() => {
+    if (user) api<Settings>("/settings").then(setSettings).catch(() => setSettings(null));
+  }, [user]);
 
   useEvents((e) => {
     if (e.type === "settings.updated") setSettings(e.data);
   });
 
-  const setRole = useCallback((r: Role) => {
-    setRoleState(r);
-    try {
-      localStorage.setItem("cgs.role", JSON.stringify(r));
-    } catch {
-      /* private window */
-    }
+  const start = useCallback((r: { token: string; user: Me }) => {
+    setUser(r.user);
+    setToken(r.token);
+    return r.user;
   }, []);
 
-  const setUserId = useCallback(
-    (id: string) => {
-      setUsers((u) => {
-        const next = { ...u, [role]: id };
-        try {
-          localStorage.setItem("cgs.users", JSON.stringify(next));
-        } catch {
-          /* private window */
-        }
-        return next;
-      });
-    },
-    [role],
+  const signIn = useCallback(
+    async (email: string, password: string) => start(await api<{ token: string; user: Me }>("/auth/signin", { email, password })),
+    [start],
   );
+
+  const signUp = useCallback(async (body: SignUpBody) => start(await api<{ token: string; user: Me }>("/auth/signup", body)), [start]);
+
+  const signOut = useCallback(async () => {
+    signingOut.current = true;
+    await api("/auth/signout", {}).catch(() => {});
+    setToken(null);
+    setUser(null);
+    router.replace("/signin");
+  }, [router]);
 
   const updateSettings = useCallback(async (patch: Partial<Settings>) => {
     setSettings(await api<Settings>("/settings", patch));
   }, []);
 
   return (
-    <RoleContext.Provider value={{ role, userId: users[role], setRole, setUserId, settings, updateSettings }}>
-      {children}
+    <RoleContext.Provider
+      value={{ user, role: user?.role ?? "student", userId: user?.id ?? "", signIn, signUp, signOut, settings, updateSettings }}
+    >
+      {/* Pages fetch on mount, so only render them once we know who is signed in. */}
+      {onAuthPage || user ? children : null}
     </RoleContext.Provider>
   );
 }

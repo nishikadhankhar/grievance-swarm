@@ -9,21 +9,20 @@ from .. import clock
 from ..agents import curator, department, desk
 from ..db import get_db
 from ..meko_client import meko
-from ..models import Grievance, Ticket, TicketEvent
+from ..auth import current_user
+from ..models import Grievance, Ticket, TicketEvent, User
 from ..services import add_event, add_message, ser_event, ser_ticket
-from . import require_user
+from . import require_role
 
 router = APIRouter(tags=["tickets"])
 STAFF = ("technician", "warden")
 
 
 class NoteIn(BaseModel):
-    user_id: str
     text: str = Field(min_length=2, max_length=1000)
 
 
 class DecisionIn(BaseModel):
-    user_id: str
     action: Literal["accept", "override", "close"]
     note: str | None = Field(default=None, max_length=1000)
 
@@ -46,34 +45,37 @@ async def get_ticket(ticket_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/students/{user_id}/tickets")
-async def student_tickets(user_id: str, db: Session = Depends(get_db)):
-    require_user(db, user_id, ("student",))
+async def student_tickets(user_id: str, me: User = Depends(current_user), db: Session = Depends(get_db)):
+    if me.role == "student" and me.id != user_id:
+        raise HTTPException(403, "Students can only list their own tickets")
     ids = db.scalars(select(Grievance.ticket_id).where(Grievance.user_id == user_id)).all()
     tickets = [db.get(Ticket, i) for i in dict.fromkeys(i for i in ids if i)]
     return [ser_ticket(db, t) for t in sorted(tickets, key=lambda t: t.created_at, reverse=True)]
 
 
 @router.get("/staff/queue")
-async def queue(role: Literal["technician", "warden"], user_id: str | None = None, db: Session = Depends(get_db)):
+async def queue(role: Literal["technician", "warden"], me: User = Depends(current_user),
+                db: Session = Depends(get_db)):
+    require_role(me, STAFF + ("dean",))
     q = select(Ticket).where(Ticket.status != "resolved")
-    if role == "technician" and user_id:
-        q = q.where(Ticket.assignee_id == user_id)
+    if role == "technician" and me.role == "technician":
+        q = q.where(Ticket.assignee_id == me.id)
     tickets = db.scalars(q).all()
     tickets = sorted(tickets, key=lambda t: (-t.report_count, t.eta or t.created_at))
     return [ser_ticket(db, t) for t in tickets]
 
 
 @router.post("/tickets/{ticket_id}/notes", status_code=201)
-async def add_note(ticket_id: str, body: NoteIn, db: Session = Depends(get_db)):
-    user = require_user(db, body.user_id, STAFF)
+async def add_note(ticket_id: str, body: NoteIn, me: User = Depends(current_user), db: Session = Depends(get_db)):
+    user = require_role(me, STAFF)
     t = _ticket(db, ticket_id)
     await department.on_note(db, t, user, body.text)
     return ser_ticket(db, t)
 
 
 @router.post("/tickets/{ticket_id}/decision")
-async def decide(ticket_id: str, body: DecisionIn, db: Session = Depends(get_db)):
-    user = require_user(db, body.user_id, STAFF)
+async def decide(ticket_id: str, body: DecisionIn, me: User = Depends(current_user), db: Session = Depends(get_db)):
+    user = require_role(me, STAFF)
     t = _ticket(db, ticket_id)
     if t.status == "resolved":
         raise HTTPException(409, f"{t.id} is already resolved")
@@ -88,7 +90,7 @@ async def decide(ticket_id: str, body: DecisionIn, db: Session = Depends(get_db)
     elif body.action == "override":
         if not body.note:
             raise HTTPException(422, "Override needs a note saying why")
-        w = meko.write(db, "technician", f"dept-{t.category}" if t.category != "other" else "campus-kb",
+        w = await meko.write(db, "technician", f"dept-{t.category}" if t.category != "other" else "campus-kb",
                        f"{t.id} override of “{t.suggestion or 'no suggestion'}”: {body.note}",
                        {"kind": "note", "ticket_id": t.id}, actor_id=user.id, target=t.category, ticket_id=t.id)
         t.status, t.visits = "in_progress", t.visits + 1
@@ -97,7 +99,7 @@ async def decide(ticket_id: str, body: DecisionIn, db: Session = Depends(get_db)
 
     else:  # close: a person closes; the Curator then proposes a lesson
         if body.note and t.category != "other":
-            w = meko.write(db, "technician", f"dept-{t.category}", f"{t.id} fix: {body.note}",
+            w = await meko.write(db, "technician", f"dept-{t.category}", f"{t.id} fix: {body.note}",
                            {"kind": "fix", "ticket_id": t.id, "place_id": t.place_id}, actor_id=user.id,
                            ticket_id=t.id)
             call_id = w.call_id
@@ -108,7 +110,7 @@ async def decide(ticket_id: str, body: DecisionIn, db: Session = Depends(get_db)
         add_event(db, t, "person", user.id, "Closed the ticket" + (f": {body.note}" if body.note else ""),
                   meko_call_id=call_id)
         add_message(db, "technician", "students", f"{t.id} resolved", "write", t.id, call_id)
-        desk.close_fingerprint(db, t, user.id)
+        await desk.close_fingerprint(db, t, user.id)
         await curator.on_close(db, t, body.note)
 
     return ser_ticket(db, t)

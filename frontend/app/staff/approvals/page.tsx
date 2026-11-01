@@ -44,7 +44,7 @@ export default function ApprovalsPage() {
     setError(null);
     deciding.current.add(a.id);
     try {
-      await api(`/approvals/${a.id}`, { user_id: userId, decision });
+      await api(`/approvals/${a.id}`, { decision });
     } catch (e) {
       deciding.current.delete(a.id);
       setError((e as Error).message);
@@ -68,7 +68,7 @@ export default function ApprovalsPage() {
     <div className="grid gap-8 px-4 pb-12 pt-8 sm:px-10 lg:grid-cols-[1fr_440px]">
       <div className="space-y-4">
         <PageHeading title="Approvals" sub="Lessons proposed by the Curator agent. Nothing enters Campus Knowledge without your approval." />
-        {!isWarden && <p className="text-sm text-gray-500">Switch to the Warden role to approve or reject.</p>}
+        {!isWarden && <p className="text-sm text-gray-500">Only the Warden can approve or reject.</p>}
         <ErrorNote error={error} />
         {pending?.length === 0 && <Empty>No proposals waiting. Close a ticket with a fix note and the Curator will propose one.</Empty>}
         {pending?.map((a) => (

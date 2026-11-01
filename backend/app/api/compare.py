@@ -38,7 +38,7 @@ async def compare(body: CompareIn, db: Session = Depends(get_db)):
     sides = {}
     for label, on in (("on", True), ("off", False)):
         if dept in DEPARTMENTS:
-            r = meko.recall(db, dept, [f"dept-{dept}", "campus-kb"], text, k=3, min_score=0.15,
+            r = await meko.recall(db, dept, [f"dept-{dept}", "campus-kb"], text, k=3, min_score=0.15,
                             where={"kind": ["fix", "lesson", "note"]}, force=on)
             top = r.items[0] if r.items else None
         else:

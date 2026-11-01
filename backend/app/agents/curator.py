@@ -57,7 +57,7 @@ async def decide(db: Session, a: Approval, warden: User, approve: bool, edited_t
                 "category": a.payload.get("category")}
         if a.kind == "pattern":
             meta.update(verified=True, series=a.payload.get("series", []), stat=a.payload.get("stat"))
-        p = meko.promote(db, "curator", text, meta, ticket_id=a.ticket_id)
+        p = await meko.promote(db, "curator", text, meta, ticket_id=a.ticket_id)
         add_message(db, "curator", "campus-kb", f"Promote: {text}", "promote", a.ticket_id, p.call_id)
     elif approve and a.kind == "closure" and a.ticket_id:
         t = db.get(Ticket, a.ticket_id)

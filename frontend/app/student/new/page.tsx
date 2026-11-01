@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRole } from "@/components/RoleProvider";
 import { Button, Card, ErrorNote } from "@/components/ui";
 import { api } from "@/lib/api";
-import type { Place, Ticket, User } from "@/lib/types";
+import type { Place, Ticket } from "@/lib/types";
 
 interface Preview {
   similar: { ticket_id: string; report_count: number; message: string } | null;
@@ -15,10 +15,9 @@ interface Preview {
 const MAX_PHOTO = 1_000_000;
 
 export default function ReportPage() {
-  const { userId, setUserId, role } = useRole();
+  const { userId, role } = useRole();
   const router = useRouter();
   const [places, setPlaces] = useState<Place[]>([]);
-  const [students, setStudents] = useState<User[]>([]);
   const [text, setText] = useState("");
   const [placeId, setPlaceId] = useState("hostel-b");
   const [photo, setPhoto] = useState<{ name: string; data: string } | null>(null);
@@ -29,7 +28,6 @@ export default function ReportPage() {
 
   useEffect(() => {
     api<Place[]>("/places").then(setPlaces).catch((e: Error) => setError(e.message));
-    api<User[]>("/users?role=student").then(setStudents).catch(() => {});
   }, []);
 
   // Before submitting: ask the Desk agent whether this matches an open ticket.
@@ -58,7 +56,6 @@ export default function ReportPage() {
     setError(null);
     try {
       const r = await api<{ ticket: Ticket }>("/grievances", {
-        user_id: userId,
         text,
         place_id: placeId,
         photo_url: photo?.data ?? null,
@@ -127,26 +124,15 @@ export default function ReportPage() {
           )}
           <ErrorNote error={error} />
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-[13px] font-medium text-gray-500">Posting as</span>
-            <select
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              disabled={role !== "student"}
-              className="rounded-lg border border-gray-200 px-2 py-1 text-[13px] font-medium"
-              aria-label="Student pseudonym"
-            >
-              {(students.length ? students : [{ id: userId } as User]).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.id}
-                </option>
-              ))}
-            </select>
+            <span className="text-[13px] text-gray-500" title="Staff and other students only ever see this pseudonym">
+              Posting as <span className="font-semibold text-gray-900">{userId}</span>
+            </span>
             <span className="flex-1" />
             <Button onClick={submit} disabled={busy || text.trim().length < 3 || role !== "student"} className="px-7 py-3.5">
               {busy ? "Submitting…" : "Submit report"}
             </Button>
           </div>
-          {role !== "student" && <p className="text-xs text-gray-500">Switch to the Student role to submit.</p>}
+          {role !== "student" && <p className="text-xs text-gray-500">Only student accounts can report problems.</p>}
         </Card>
       </div>
     </div>
