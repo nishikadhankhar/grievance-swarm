@@ -18,18 +18,29 @@ export function EmergencyStrip() {
         </span>
       </div>
       <div className="flex items-center gap-3 font-medium text-[11px] sm:text-xs">
-        <a
-          href={`tel:${EMERGENCY_CONTACTS.campusSecurity.replace(/\s+/g, "")}`}
-          className="inline-flex items-center gap-1 font-semibold text-red-700 underline decoration-red-300 hover:text-red-900"
-        >
-          Campus Security: {EMERGENCY_CONTACTS.campusSecurity}
-        </a>
-        <span className="text-red-300">·</span>
+        {EMERGENCY_CONTACTS.campusSecurity && (
+          <>
+            <a
+              href={`tel:${EMERGENCY_CONTACTS.campusSecurity.replace(/\s+/g, "")}`}
+              className="inline-flex items-center gap-1 font-semibold text-red-700 underline decoration-red-300 hover:text-red-900"
+            >
+              Campus Security: {EMERGENCY_CONTACTS.campusSecurity}
+            </a>
+            <span className="text-red-300">·</span>
+          </>
+        )}
         <a
           href={`tel:${EMERGENCY_CONTACTS.fire}`}
           className="inline-flex items-center gap-1 font-semibold text-red-700 underline decoration-red-300 hover:text-red-900"
         >
           Fire: {EMERGENCY_CONTACTS.fire}
+        </a>
+        <span className="text-red-300">·</span>
+        <a
+          href={`tel:${EMERGENCY_CONTACTS.medical}`}
+          className="inline-flex items-center gap-1 font-semibold text-red-700 underline decoration-red-300 hover:text-red-900"
+        >
+          Ambulance: {EMERGENCY_CONTACTS.medical}
         </a>
       </div>
     </div>

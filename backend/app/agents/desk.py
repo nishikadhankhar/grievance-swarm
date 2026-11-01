@@ -40,12 +40,14 @@ async def preview(db: Session, text: str, place_id: str) -> dict:
 
 
 async def handle_grievance(db: Session, user: User | None, text: str, place: Place, photo_url: str | None = None,
-                           simulated: bool = False) -> tuple[Ticket, Grievance, bool]:
+                           simulated: bool = False, force_new: bool = False) -> tuple[Ticket, Grievance, bool]:
     red = redact(text)
     cls = await llm.classify(get_settings(db), red)
     category = cls["category"]
     reporter = user.id if user else "anonymous"
-    ticket, r = await recall_similar(db, red, place.id, category, actor_id=reporter, simulated=simulated)
+    # The student can overrule the merge suggestion; then no duplicate check runs and a new ticket is made.
+    ticket, r = (None, None) if force_new else await recall_similar(db, red, place.id, category, actor_id=reporter,
+                                                                    simulated=simulated)
 
     g = Grievance(user_id=user.id if user else None, raw_text_redacted=red, place_id=place.id, category=category,
                   photo_url=photo_url, created_at=clock.now())
@@ -76,7 +78,8 @@ async def handle_grievance(db: Session, user: User | None, text: str, place: Pla
     fp = await meko.write(db, "desk", "desk", f"{ticket.title}. {red}",
                     {"kind": "fingerprint", "ticket_id": ticket.id, "status": "open", "place_id": place.id,
                      "category": category}, ticket_id=ticket.id, simulated=simulated)
-    why = "No similar open ticket found" if not r.skipped else "Meko is OFF, so no duplicate check"
+    why = ("Student said it's a different issue from the suggested match" if force_new
+           else "No similar open ticket found" if not r.skipped else "Meko is OFF, so no duplicate check")
     add_event(db, ticket, "agent", "desk", f"Created {ticket.id}, tagged {category}", why, fp.call_id, simulated)
     await route_to(db, ticket, place, red, simulated)
     return ticket, g, False

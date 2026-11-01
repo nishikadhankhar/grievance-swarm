@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { LOCAL_MEKO_BADGE } from "@/lib/constants";
+import { MEKO_MODE_BADGE } from "@/lib/constants";
 import { HOME, ROLE_LABEL } from "@/lib/roles";
 import type { Me, Role } from "@/lib/types";
 import { useSocketUp } from "@/lib/ws";
@@ -103,6 +103,11 @@ const TABS: Record<Role, { label: string; href: string }[]> = {
 export function MekoToggle() {
   const { settings, updateSettings } = useRole();
   const on = settings?.meko_enabled ?? true;
+  const [mode, setMode] = useState<string | null>(null);
+  useEffect(() => {
+    api<{ meko_backend: string }>("/health").then((h) => setMode(h.meko_backend)).catch(() => setMode(null));
+  }, []);
+  const badge = mode ? MEKO_MODE_BADGE[mode] : undefined;
   return (
     <div className="flex items-center gap-2">
       <button
@@ -118,12 +123,17 @@ export function MekoToggle() {
         </span>
         <span className={cx("w-7 text-xs font-semibold", on ? "text-orange-500" : "text-gray-500")}>{on ? "ON" : "OFF"}</span>
       </button>
-      <span
-        className="hidden xl:inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
-        title="Running on local SQLite keyword stand-in (offline mode)"
-      >
-        {LOCAL_MEKO_BADGE}
-      </span>
+      {badge && (
+        <span
+          className={cx(
+            "hidden xl:inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium",
+            mode === "real" ? "border-green-200 bg-green-50 text-green-800" : "border-amber-200 bg-amber-50 text-amber-800",
+          )}
+          title={badge.title}
+        >
+          {badge.label}
+        </span>
+      )}
     </div>
   );
 }
@@ -158,12 +168,14 @@ export function TopBar() {
           Swarm
         </Link>
         <AccountMenu />
-        <Link href="/settings" className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Demo settings" aria-label="Demo settings">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-          </svg>
-        </Link>
+        {role !== "student" && (
+          <Link href="/settings" className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Demo settings" aria-label="Demo settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+            </svg>
+          </Link>
+        )}
       </div>
       {role !== "student" && (
         <nav className="flex gap-7 overflow-x-auto border-b border-gray-200 px-4 sm:px-8" aria-label="Screens">

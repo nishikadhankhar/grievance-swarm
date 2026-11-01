@@ -31,10 +31,8 @@ export default function ReportPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // User decision on duplicate detection:
-  // - null: default/unanswered
-  // - false: user confirmed "No, mine is different" (force new ticket)
-  // - true: user confirmed "Yes, add me"
+  // True once the student answers "No, mine is different" to the merge banner: the backend then skips
+  // the duplicate check and opens a new ticket.
   const [forceNewTicket, setForceNewTicket] = useState(false);
 
   const seq = useRef(0);
@@ -76,12 +74,6 @@ export default function ReportPage() {
     setBusy(true);
     setError(null);
     try {
-      /**
-       * TODO (Backend Change Needed for 'No, mine is different'):
-       * In backend/app/api/grievances.py, update GrievanceIn to accept `force_new_ticket: bool = False`.
-       * In backend/app/agents/desk.py:handle_grievance(), if `force_new_ticket` is True, bypass
-       * `recall_similar()` so that a new ticket is always created rather than merging.
-       */
       const payload: Record<string, unknown> = {
         text,
         place_id: placeId,

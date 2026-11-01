@@ -20,6 +20,7 @@ class PreviewIn(BaseModel):
 class GrievanceIn(PreviewIn):
     photo_url: str | None = None
     anonymous: bool = False
+    force_new_ticket: bool = False  # the student said "No, mine is different" to the merge banner
 
 
 def _place(db: Session, place_id: str) -> Place:
@@ -40,5 +41,6 @@ async def preview(body: PreviewIn, db: Session = Depends(get_db)):
 async def create_grievance(body: GrievanceIn, me: User = Depends(current_user), db: Session = Depends(get_db)):
     user = require_role(me, ("student",))
     ticket, g, merged = await desk.handle_grievance(db, None if body.anonymous else user, body.text,
-                                                    _place(db, body.place_id), body.photo_url)
+                                                    _place(db, body.place_id), body.photo_url,
+                                                    force_new=body.force_new_ticket)
     return {"grievance_id": g.id, "merged": merged, "ticket": ser_ticket(db, ticket)}

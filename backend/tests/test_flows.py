@@ -230,3 +230,13 @@ def test_websocket_needs_a_session(client):
     with pytest.raises(WebSocketDisconnect):
         with TestClient(app).websocket_connect("/ws/events") as ws:
             ws.receive_json()
+
+
+def test_student_can_say_mine_is_different(client):
+    p = client.post("/grievances/preview", json={"text": "Wifi is dead on 2nd floor, Hostel B", "place_id": "hostel-b"})
+    assert p.json()["similar"]["ticket_id"] == "T-074"
+    r = client.post("/grievances", json={"user_id": "S-1042", "text": "Wifi is dead on 2nd floor, Hostel B",
+                                         "place_id": "hostel-b", "force_new_ticket": True}).json()
+    assert not r["merged"] and r["ticket"]["id"] != "T-074" and r["ticket"]["category"] == "wifi"
+    created = [e for e in client.get(f"/tickets/{r['ticket']['id']}").json()["events"] if e["actor_id"] == "desk"][0]
+    assert created["reason"].startswith("Student said")
